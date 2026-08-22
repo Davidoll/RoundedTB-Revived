@@ -1,0 +1,25 @@
+# Created using wingetcreate (draft, 2026-08)
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.12.0.schema.json
+
+PackageIdentifier: linlinger.RoundedTBRevived
+PackageVersion: 4.1.2
+PackageLocale: en-US
+Publisher: linlinger
+PublisherUrl: https://github.com/linlinger/RoundedTB-Revived
+PublisherSupportUrl: https://github.com/linlinger/RoundedTB-Revived/issues
+PackageName: RoundedTB Revived
+PackageUrl: https://github.com/linlinger/RoundedTB-Revived
+License: GNU General Public License v3.0
+LicenseUrl: https://github.com/linlinger/RoundedTB-Revived/blob/master/LICENSE
+Copyright: (c) 2026 RoundedTB Revived contributors; original by torchgm
+ShortDescription: Add margins, rounded corners and segments to your Windows taskbar
+Description: Community-maintained continuation of RoundedTB. Adds configurable margins, rounded corners and separate segments to the Windows 10/11 taskbar, with dynamic mode (taskbar resizes with icon count) and per-user install.
+ReleaseDate: 2026-08-23
+Tags:
+- taskbar
+- windows
+- customization
+- taskbar-corners
+- tray
+ManifestType: locale
+ManifestVersion: 1.12.0
