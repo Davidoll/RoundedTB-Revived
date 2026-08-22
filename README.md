@@ -12,8 +12,26 @@ and configurable segments to the Windows 10 / 11 taskbar.
 
 ## How do I get it?
 
-Grab the latest release, unzip it and run `RoundedTB.exe`. You can also compile it
-yourself from source (`build.bat`).
+Three ways:
+
+1. **Installer (recommended)** — grab the `-setup.exe` for your architecture from
+   the latest [release](https://github.com/linlinger/RoundedTB-Revived/releases) and
+   run it. It installs per-user (no admin needed), into `%LOCALAPPDATA%\RoundedTB`,
+   with options to start on logon, create a desktop shortcut, and launch immediately.
+   Uninstalling keeps your settings (`rtb.json`) by default — tick
+   "Delete settings" in the uninstaller to clean those up too.
+   The wizard is available in English and Simplified Chinese.
+   > Note: installers are currently unsigned, so Windows SmartScreen may show
+   > "Unknown publisher" on first run — pick **More info → Run anyway**.
+2. **Portable zip** — grab the `-win-<arch>.zip` (self-contained, bundles the .NET
+   runtime) or the `-framework-dependent.zip` (smaller, requires the .NET Desktop
+   Runtime 8). Unzip and run `RoundedTB.exe`.
+3. **winget** — once the first winget manifest is merged:
+   `winget install linlinger.RoundedTBRevived`.
+
+You can also compile it yourself from source (`build.bat`; add `--installer` to
+`build.bat --release --version <ver>` to build the installers too — see the script
+header for details).
 
 ## Continuous build
 
