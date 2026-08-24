@@ -651,38 +651,129 @@ namespace RoundedTB
             return retVal;
         }
 
+        // [grace] 最近一次检测命中的时刻。任务视图的 island 窗口只抢前台约 1 帧
+        //(100ms 采样下经常来不及连续命中两次),加 200ms 宽限消除开关瞬间的抖动。
+        private static long _lastOverlayHitTicks = -1000;
+
         /// <summary>
-        /// 判断 Alt+Tab / 任务切换器是否真的打开:存在一个可见的、覆盖整个任务栏区域的
-        /// XamlExplorerHostIslandWindow(Win11 的 Alt+Tab 界面全屏覆盖,包括任务栏)。
+        /// 判断 Alt+Tab / 任务视图(Win+Tab)是否真的打开。
+        ///
+        /// 判据(满足其一即可,兼容不同 Windows 11 build 与不同宿主实现):
+        ///  1) 前台窗口是任务视图/Alt+Tab 宿主(XamlExplorerHostIslandWindow 或
+        ///     全屏 Windows.UI.Core.CoreWindow)且其矩形覆盖工作区/任务栏。
+        ///     实测(Win11 build 28000):Win+Tab 时前台会短暂切到 island 窗口;
+        ///     个别 build 上则是全屏 CoreWindow(注意 CoreWindow 是 UWP 通用宿主,
+        ///     有常驻全屏实例,必须"是前台 + 覆盖工作区"同时成立才判)。
+        ///  2) 枚举到可见的 XamlExplorerHostIslandWindow 覆盖工作区(较新 build 的
+        ///     Alt+Tab 界面)或整个任务栏(较旧 build 的全屏界面)。
+        ///  3) 200ms 宽限:最近一次命中后短期内仍视为打开,防单帧抖动。
+        ///
+        /// 只判类名不够:常驻的托盘/小组件 island 与桌面 XAML 窗口同类,且常驻存在,
+        /// 必须配合覆盖判据才能排除误判。
         /// </summary>
         private static bool IsAltTabOverlayOpen(IntPtr taskbarHwnd)
         {
             try
             {
                 LocalPInvoke.GetWindowRect(taskbarHwnd, out LocalPInvoke.RECT taskbarRect);
-                List<IntPtr> windows = Interaction.GetTopLevelWindows();
-                foreach (IntPtr hwnd in windows)
+
+                // 任务栏所在监视器的工作区(新 build 上覆盖层即为此大小)。
+                LocalPInvoke.MONITORINFO mi = new LocalPInvoke.MONITORINFO();
+                mi.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(LocalPInvoke.MONITORINFO));
+                IntPtr monitor = LocalPInvoke.MonitorFromWindow(taskbarHwnd, LocalPInvoke.MONITOR_DEFAULTTONEAREST);
+                if (!LocalPInvoke.GetMonitorInfo(monitor, ref mi))
                 {
-                    if (!LocalPInvoke.IsWindowVisible(hwnd)) continue;
+                    return false;
+                }
+                LocalPInvoke.RECT work = mi.rcWork;
 
-                    StringBuilder cls = new StringBuilder(1024);
-                    LocalPInvoke.GetClassName(hwnd, cls, 1024);
-                    if (cls.ToString() != "XamlExplorerHostIslandWindow") continue;
+                bool hit = false;
 
-                    LocalPInvoke.GetWindowRect(hwnd, out LocalPInvoke.RECT r);
-                    // Alt+Tab 界面必须覆盖任务栏所在区域(全屏)
-                    if (r.Left <= taskbarRect.Left && r.Top <= taskbarRect.Top &&
-                        r.Right >= taskbarRect.Right && r.Bottom >= taskbarRect.Bottom)
+                // 判据 1:前台窗口本身就是任务视图/Alt+Tab 的宿主且覆盖工作区。
+                // 实测(Win11 build 28000):Win+Tab 时前台会短暂变成
+                //   XamlExplorerHostIslandWindow(任务视图 island,rect=工作区),
+                // 个别 build/时序下则是 Windows.UI.Core.CoreWindow(全屏)。
+                // 注意:CoreWindow 是 UWP 通用宿主,存在常驻全屏实例,所以必须
+                // 同时满足"是前台"+"覆盖工作区",否则点中任何最大化 UWP 应用都会误判。
+                IntPtr fg = LocalPInvoke.GetForegroundWindow();
+                if (fg != IntPtr.Zero)
+                {
+                    StringBuilder fgcls = new StringBuilder(1024);
+                    LocalPInvoke.GetClassName(fg, fgcls, 1024);
+                    string cls = fgcls.ToString();
+                    // island 窗口不要求可见性:实测它抢前台的那一帧 IsWindowVisible
+                    // 可能还是 false(样式切换滞后),而"是前台窗口"本身已是强信号。
+                    // CoreWindow 要求可见:它是 UWP 通用宿主,常驻全屏实例多。
+                    if (cls == "XamlExplorerHostIslandWindow" ||
+                        (cls == "Windows.UI.Core.CoreWindow" && LocalPInvoke.IsWindowVisible(fg)))
                     {
-                        return true;
+                        LocalPInvoke.GetWindowRect(fg, out LocalPInvoke.RECT r);
+                        bool coversWorkArea =
+                            r.Left <= work.Left && r.Top <= work.Top &&
+                            r.Right >= work.Right && r.Bottom >= work.Bottom;
+                        bool coversTaskbar =
+                            r.Left <= taskbarRect.Left && r.Top <= taskbarRect.Top &&
+                            r.Right >= taskbarRect.Right && r.Bottom >= taskbarRect.Bottom;
+                        if (coversWorkArea || coversTaskbar)
+                        {
+                            hit = true;
+                        }
                     }
                 }
+
+                // 判据 2:枚举到可见的 XamlExplorerHostIslandWindow 覆盖工作区/任务栏。
+                // 覆盖 Alt+Tab 等不抢前台、但 island 窗口可见的场景。
+                if (!hit)
+                {
+                    List<IntPtr> windows = Interaction.GetTopLevelWindows();
+                    foreach (IntPtr hwnd in windows)
+                    {
+                        if (!LocalPInvoke.IsWindowVisible(hwnd)) continue;
+
+                        StringBuilder cls = new StringBuilder(1024);
+                        LocalPInvoke.GetClassName(hwnd, cls, 1024);
+                        if (cls.ToString() != "XamlExplorerHostIslandWindow") continue;
+
+                        LocalPInvoke.GetWindowRect(hwnd, out LocalPInvoke.RECT r);
+                        // 覆盖工作区(新 build:工作区大小界面)或覆盖整个任务栏(旧 build:全屏界面)。
+                        bool coversWorkArea =
+                            r.Left <= work.Left && r.Top <= work.Top &&
+                            r.Right >= work.Right && r.Bottom >= work.Bottom;
+                        bool coversTaskbar =
+                            r.Left <= taskbarRect.Left && r.Top <= taskbarRect.Top &&
+                            r.Right >= taskbarRect.Right && r.Bottom >= taskbarRect.Bottom;
+                        if (coversWorkArea || coversTaskbar)
+                        {
+                            hit = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (hit)
+                {
+                    _lastOverlayHitTicks = System.Environment.TickCount64;
+                    return true;
+                }
+
+                // 判据 3(宽限):最近 200ms 内命中过则仍视为打开,
+                // 平滑 island 抢前台仅 1 帧、或窗口可见性切换的瞬态。
+                return (System.Environment.TickCount64 - _lastOverlayHitTicks) < 200;
             }
             catch (Exception)
             {
                 // 检测失败时不视为 Alt+Tab 打开
+                return false;
             }
-            return false;
+        }
+
+        /// <summary>
+        /// [DEBUG] 公开包装:供 Background 的 fill 状态迁移日志调用,报告覆盖层检测是否命中。
+        /// 与私有 IsAltTabOverlayOpen 同逻辑,但允许 Background 跨类访问。
+        /// </summary>
+        public static bool IsAltTabOverlayOpenForLog(IntPtr taskbarHwnd)
+        {
+            return IsAltTabOverlayOpen(taskbarHwnd);
         }
 
         /// <summary>

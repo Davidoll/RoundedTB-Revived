@@ -16,6 +16,8 @@ namespace RoundedTB
         int infrequentCount = 0;
         int settingsRequestCount = 0; // 单实例"设置请求"窗口枚举的低频计数(每 3 次 infrequent 一次)
         int loopLogCount = 0; // [DEBUG] 节流状态日志计数
+        bool lastFilled = false; // [DEBUG] 上一次 fill 判定,用于记录状态迁移(Alt+Tab 验证)
+        string lastOverlaySig = null; // [DEBUG] 上一次 XAML 覆盖层签名,变化时记录(定位 win+tab 检测失败)
 
         // 移植自 gniang (Phase 1):句柄缺失(Explorer 崩溃/重启)时指数退避重建,
         // 而不是每 100ms 重建 CUIAutomation + AppListXaml 直到它回来。
@@ -180,7 +182,74 @@ namespace RoundedTB
 
 
                             // If the taskbar's monitor has a maximised window, reset it so it's "filled"
-                            if (Taskbar.TaskbarShouldBeFilled(taskbars[current].TaskbarHwnd, settings))
+                            bool shouldFill = Taskbar.TaskbarShouldBeFilled(taskbars[current].TaskbarHwnd, settings);
+                            // [DEBUG] fill 状态迁移日志(Alt+Tab / Win+Tab 验证):只在翻转时记一条。
+                            // 修复前:按 Win+Tab/Alt+Tab 时此处 shouldFill 始终为 false(覆盖层检测失败)。
+                            if (ChannelInfo.VerboseLogging && shouldFill != lastFilled)
+                            {
+                                // 记录前台窗口类名,用于区分 alt+tab(前台=切换目标) / win+tab(前台=任务视图) / maximise
+                                string fgClass = "(none)";
+                                try
+                                {
+                                    IntPtr fg = LocalPInvoke.GetForegroundWindow();
+                                    if (fg != IntPtr.Zero)
+                                    {
+                                        StringBuilder fgc = new StringBuilder(256);
+                                        LocalPInvoke.GetClassName(fg, fgc, 256);
+                                        fgClass = fgc.ToString();
+                                    }
+                                }
+                                catch { }
+                                mw.interaction.AddLog($"[fill] taskbar {current}: {lastFilled} -> {shouldFill} (alttab/overlay={Taskbar.IsAltTabOverlayOpenForLog(taskbars[current].TaskbarHwnd)}, fg={fgClass})");
+                                lastFilled = shouldFill;
+                            }
+                            // [DEBUG] XAML 覆盖层扫描:记录所有 Xaml/Island/TaskView 类顶层窗口,
+                            // 以及任何"可见且覆盖整个工作区"的顶层窗口(无论类名——任务视图可能用别的类名),
+                            // 签名变化时记一条。定位 win+tab 覆盖层为何未命中 IsAltTabOverlayOpen。
+                            if (ChannelInfo.VerboseLogging)
+                            {
+                                StringBuilder ovlSig = new StringBuilder();
+                                LocalPInvoke.RECT ovlWork = new LocalPInvoke.RECT();
+                                try
+                                {
+                                    // 任务栏监视器的工作区(检测判据的参照系)
+                                    LocalPInvoke.MONITORINFO ovlMi = new LocalPInvoke.MONITORINFO();
+                                    ovlMi.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(LocalPInvoke.MONITORINFO));
+                                    IntPtr ovlMon = LocalPInvoke.MonitorFromWindow(taskbars[current].TaskbarHwnd, LocalPInvoke.MONITOR_DEFAULTTONEAREST);
+                                    if (LocalPInvoke.GetMonitorInfo(ovlMon, ref ovlMi))
+                                    {
+                                        ovlWork = ovlMi.rcWork;
+                                        ovlSig.Append($"work=({ovlWork.Left},{ovlWork.Top})-({ovlWork.Right},{ovlWork.Bottom});");
+                                    }
+                                    LocalPInvoke.GetWindowRect(taskbars[current].TaskbarHwnd, out LocalPInvoke.RECT ovlTbRect);
+                                    ovlSig.Append($"tb=({ovlTbRect.Left},{ovlTbRect.Top})-({ovlTbRect.Right},{ovlTbRect.Bottom});");
+                                    List<IntPtr> ovlWins = Interaction.GetTopLevelWindows();
+                                    foreach (IntPtr oh in ovlWins)
+                                    {
+                                        StringBuilder oc = new StringBuilder(1024);
+                                        LocalPInvoke.GetClassName(oh, oc, 1024);
+                                        string oname = oc.ToString();
+                                        bool ovis = LocalPInvoke.IsWindowVisible(oh);
+                                        LocalPInvoke.RECT or = new LocalPInvoke.RECT();
+                                        LocalPInvoke.GetWindowRect(oh, out or);
+                                        bool isXaml = oname.Contains("Xaml") || oname.Contains("Island") || oname.Contains("TaskView");
+                                        // 可见且完全覆盖工作区的窗口(潜在 overlay,不论类名)
+                                        bool coversWork = ovis &&
+                                            or.Left <= ovlWork.Left && or.Top <= ovlWork.Top &&
+                                            or.Right >= ovlWork.Right && or.Bottom >= ovlWork.Bottom;
+                                        if (!isXaml && !coversWork) continue;
+                                        ovlSig.Append($"{oh.ToInt64():X}:{oname}:({or.Left},{or.Top})-({or.Right},{or.Bottom}):vis={ovis};");
+                                    }
+                                }
+                                catch { }
+                                string sig = ovlSig.ToString();
+                                if (sig != lastOverlaySig)
+                                {
+                                    mw.interaction.AddLog($"[ovl] {sig}");
+                                    lastOverlaySig = sig;
+                                }
+                            }
+                            if (shouldFill)
                             {
                                 if (taskbars[current].Ignored == false)
                                 {
