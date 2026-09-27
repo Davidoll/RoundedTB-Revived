@@ -138,14 +138,22 @@ namespace RoundedTB
             source.AddHook(interaction.HwndHook);
             // 区分"点叉"(隐藏到托盘)与外部关闭(Alt+F4 / 任务管理器 / 注销关机 → 真正退出):
             // WPF-UI 4.x 无 TitleBar.CloseActionOverride,标题栏按钮走 Window.Close()(不产生
-            // WM_CLOSE),Alt+F4 与系统注销则发 WM_CLOSE/WM_QUERYENDSESSION,以此区分。
+            // WM_CLOSE);Alt+F4 发 WM_SYSCOMMAND/SC_CLOSE → WPF 内部会转成 Close(),因此单独
+            // 记录;任务管理器结束任务、注销/关机则发 WM_CLOSE/WM_QUERYENDSESSION。
             const int WM_CLOSE_MSG = 0x0010;
             const int WM_QUERYENDSESSION = 0x0011;
             const int WM_ENDSESSION = 0x0022;
+            const int WM_SYSCOMMAND = 0x0112;
+            const int SC_CLOSE = 0xF060;
             source.AddHook((IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) =>
             {
                 if (msg == WM_CLOSE_MSG || msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION)
                 {
+                    externalCloseReceived = true;
+                }
+                else if (msg == WM_SYSCOMMAND && (w.ToInt64() & 0xFFF0) == SC_CLOSE)
+                {
+                    // Alt+F4 / 系统菜单"关闭":对齐原行为(真正退出并恢复任务栏)。
                     externalCloseReceived = true;
                 }
                 return IntPtr.Zero;
