@@ -1,16 +1,16 @@
-; ============================================================
+﻿; ============================================================
 ;  RoundedTB Revived - Inno Setup script
 ;
 ;  Build (via ISCC):
 ;    ISCC.exe /DPubDir="C:\path\to\published\files" \
-;             /DVersion="R4.1.2" \
+;             /DVersion="R4.1.3" \
 ;             /DArch="x64" \
 ;             /DFrameworkDependent="false" \
 ;             Installer\RoundedTB.iss
 ;
 ;  /D parameters:
 ;    PubDir             - folder containing the dotnet publish output (required)
-;    Version            - release version string, e.g. R4.1.2 (required)
+;    Version            - release version string, e.g. R4.1.3 (required)
 ;    Arch               - x86 | x64 | arm64 (required)
 ;    FrameworkDependent - true|false; false = self-contained (default false)
 ;    SetupIconFile      - installer window icon (default ..\RoundedTB\RoundedTB.ico)
@@ -29,7 +29,7 @@
   #define PubDir "RoundedTB\bin\Release\net8.0-windows10.0.19041\win-x64-sc"
 #endif
 #ifndef Version
-  #define Version "R4.1.2"
+  #define Version "R4.1.3"
 #endif
 #ifndef Arch
   #define Arch "x64"

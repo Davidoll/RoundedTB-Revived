@@ -4,7 +4,7 @@
 # BEFORE SUBMITTING:
 #   - Replace each <sha256-*> with the real hash of the uploaded installer
 #     (powershell: (Get-FileHash <file> -Algorithm SHA256).Hash)
-#   - Confirm the R4.1.2 release tag is live with these exact filenames.
+#   - Confirm the R4.1.3 release tag is live with these exact filenames.
 #
 # Installer facts (from Installer/RoundedTB.iss):
 #   - Inno Setup 7 per-user installer (Scope: user, no UAC)
@@ -13,7 +13,7 @@
 #   - x86/x64/arm64 all share the same AppId (per-user install is arch-agnostic)
 
 PackageIdentifier: linlinger.RoundedTBRevived
-PackageVersion: 4.1.2
+PackageVersion: 4.1.3
 MinimumOSVersion: 10.0.14393.0
 InstallerType: inno
 InstallModes:
@@ -27,17 +27,17 @@ InstallerSwitches:
 UpgradeBehavior: install
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.2/RoundedTB-R4.1.2-win-x64-setup.exe
+  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.3/RoundedTB-R4.1.3-win-x64-setup.exe
   InstallerSha256: <sha256-x64>
   ProductCode: '{9C8A6E42-5B31-4F0D-8A7C-2E1D4B6F0A33}'
   Scope: user
 - Architecture: x86
-  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.2/RoundedTB-R4.1.2-win-x86-setup.exe
+  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.3/RoundedTB-R4.1.3-win-x86-setup.exe
   InstallerSha256: <sha256-x86>
   ProductCode: '{9C8A6E42-5B31-4F0D-8A7C-2E1D4B6F0A33}'
   Scope: user
 - Architecture: arm64
-  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.2/RoundedTB-R4.1.2-win-arm64-setup.exe
+  InstallerUrl: https://github.com/linlinger/RoundedTB-Revived/releases/download/R4.1.3/RoundedTB-R4.1.3-win-arm64-setup.exe
   InstallerSha256: <sha256-arm64>
   ProductCode: '{9C8A6E42-5B31-4F0D-8A7C-2E1D4B6F0A33}'
   Scope: user

@@ -27,8 +27,8 @@ REM
 REM      Add --installer to also build Inno Setup installers from the same
 REM      publish output (requires Inno Setup 6/7 installed - ISCC on PATH or
 REM      under C:\Program Files\Inno Setup 7):
-REM        build.bat --release --version R4.1.2 --installer
-REM      -> plus RoundedTB-R4.1.2-win-<arch>[-framework-dependent]-setup.exe
+REM        build.bat --release --version R4.1.3 --installer
+REM      -> plus RoundedTB-R4.1.3-win-<arch>[-framework-dependent]-setup.exe
 REM
 REM  Works with either:
 REM    - "Build Tools for Visual Studio"  -> uses msbuild (same as CI)
