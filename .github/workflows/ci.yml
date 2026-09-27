@@ -34,3 +34,65 @@ jobs:
         name: rtb-artifacts
         path: |
           .\RoundedTB\RoundedTB\bin\Release\RoundedTB-*\
+
+  installers:
+    name: build-installers
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        $isDir = "C:\tools\innosetup"
+        New-Item -ItemType Directory -Force -Path $isDir | Out-Null
+        $installer = "C:\tools\innosetup-7.1.0-x64.exe"
+        Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe" -OutFile $installer
+        & $installer /VERYSILENT /NORESTART /DIR=$isDir
+        if (-not (Test-Path "$isDir\ISCC.exe")) { throw "ISCC.exe not found after install" }
+        Write-Host "Inno Setup installed at $isDir"
+
+    - name: Build installers (all archs, SC + FD)
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $ver = "R4.1.2"
+        $iscc = "C:\tools\innosetup\ISCC.exe"
+        $staging = Join-Path $env:RUNNER_TEMP "staging"
+        $out = Join-Path $env:RUNNER_TEMP "installers"
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $arches = @("x86","x64","arm64")
+        foreach ($a in $arches) {
+          foreach ($sc in @($false,$true)) {
+            $tag = if ($sc) { "sc" } else { "fd" }
+            $pubDir = Join-Path $staging "win-$a-$tag"
+            $fdFlag = if ($sc) { "false" } else { "true" }
+            Write-Host "::group::publish win-$a ($tag)"
+            dotnet publish "RoundedTB\RoundedTB.csproj" -c Release -r "win-$a" `
+              --self-contained $sc -p:Channel=master -o $pubDir -v minimal
+            if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for win-$a-$tag" }
+            Write-Host "::endgroup::"
+            Write-Host "::group::ISCC win-$a ($tag)"
+            & $iscc "/DPubDir=$pubDir" "/DVersion=$ver" "/DArch=$a" "/DFrameworkDependent=$fdFlag" "Installer\RoundedTB.iss"
+            if ($LASTEXITCODE -ne 0) { throw "ISCC failed for win-$a-$tag" }
+            Write-Host "::endgroup::"
+            $suffix = if ($sc) { "" } else { "-framework-dependent" }
+            $produced = "Installer\output\RoundedTB-$ver-win-$a$suffix-setup.exe"
+            Move-Item -Force $produced (Join-Path $out "RoundedTB-$ver-win-$a$suffix-setup.exe")
+          }
+        }
+        Get-ChildItem $out | ForEach-Object { Write-Host "  $($_.Name)" }
+
+    - name: Upload installer artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtb-installers
+        path: |
+          ${{ runner.temp }}\installers\*-setup.exe

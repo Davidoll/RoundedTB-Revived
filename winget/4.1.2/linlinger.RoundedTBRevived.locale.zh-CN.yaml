@@ -1,0 +1,25 @@
+# Created using wingetcreate (draft, 2026-08)
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.12.0.schema.json
+
+PackageIdentifier: linlinger.RoundedTBRevived
+PackageVersion: 4.1.2
+PackageLocale: zh-CN
+Publisher: linlinger
+PublisherUrl: https://github.com/linlinger/RoundedTB-Revived
+PublisherSupportUrl: https://github.com/linlinger/RoundedTB-Revived/issues
+PackageName: RoundedTB Revived
+PackageUrl: https://github.com/linlinger/RoundedTB-Revived
+License: GNU 通用公共许可证 v3.0
+LicenseUrl: https://github.com/linlinger/RoundedTB-Revived/blob/master/LICENSE
+Copyright: (c) 2026 RoundedTB Revived 维护者; 原作者 torchgm
+ShortDescription: 给 Windows 任务栏添加边距、圆角和分段
+Description: RoundedTB 的社区维护续作。为 Windows 10/11 任务栏添加可配置的边距、圆角和独立分段,支持动态模式(任务栏随图标数量自动调整大小),每用户安装。
+ReleaseDate: 2026-08-23
+Tags:
+- 任务栏
+- windows
+- 自定义
+- 任务栏圆角
+- 系统托盘
+ManifestType: locale
+ManifestVersion: 1.12.0

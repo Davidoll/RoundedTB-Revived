@@ -10,7 +10,14 @@ RoundedTB Revived 是 RoundedTB 的社区维护续作(RoundedTB 原作者为 tor
 
 ## 如何获取
 
-从 [Releases](https://github.com/linlinger/RoundedTB-Revived/releases) 下载最新版本,解压后运行 `RoundedTB.exe`。你也可以自己从源码编译(运行 `build.bat`)。
+三种方式:
+
+1. **安装器(推荐)** — 从最新 [Releases](https://github.com/linlinger/RoundedTB-Revived/releases) 下载对应你系统架构的 `-setup.exe` 并运行。它按用户安装(无需管理员权限),安装到 `%LOCALAPPDATA%\RoundedTB`,可选开机自启、创建桌面快捷方式、装完立即运行。卸载时默认保留配置(`rtb.json`),在卸载界面勾选"删除设置"才会一并清理。安装向导提供英文和简体中文。
+   > 注意:安装器目前未签名,Windows SmartScreen 首次运行可能提示"未知发布者"——点**更多信息 → 仍要运行**即可。
+2. **绿色 zip 包** — 下载 `-win-<arch>.zip`(self-contained,内置 .NET 运行时)或更小的 `-framework-dependent.zip`(需先装 .NET Desktop Runtime 8),解压后运行 `RoundedTB.exe`。
+3. **winget** — 首个 winget manifest 合并后:`winget install linlinger.RoundedTBRevived`。
+
+也可以自己从源码编译(运行 `build.bat`;在 `build.bat --release --version <ver>` 后加 `--installer` 可同时构建安装器,详见脚本头部注释)。
 
 ## 持续构建(GitHub Actions)
 
