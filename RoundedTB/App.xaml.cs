@@ -48,19 +48,15 @@ namespace RoundedTB
                 MessageBox.Show(message, "RoundedTB Revived", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
-            WPFUI.Theme.Watcher.Start();
+            // WPF-UI 4.x:不再有全局 Theme.Watcher.Start(),改为按窗口监听系统主题
+            // (SystemThemeWatcher.Watch 在主窗口 Loaded 时注册,见 MainWindow)。
+            Wpf.Ui.Appearance.ApplicationThemeManager.Apply(
+                Wpf.Ui.Appearance.ApplicationThemeManager.GetAppTheme());
 
-            // 手动创建主窗口(不通过 StartupUri)。
+            // 手动创建主窗口(不通过 StartupUri)。托盘图标/菜单由 XAML 的 TaskbarIcon
+            // (Hardcodet.NotifyIcon)用独立宿主窗口提供,不依赖主窗口是否显示,
+            // 因此不再需要"透明度 0 地 Show+Hide"预热窗口——消除了启动闪窗。
             var mainWindow = new MainWindow();
-
-            // 预热窗口一次,让托盘右键菜单"启动即用":WPF ContextMenu 在从未显示/激活的 Hidden
-            // 窗口上 Popup 不渲染。之前的做法是直接 Show()+Hide(),启动瞬间窗口一闪而过,且在
-            // 首次启动(欢迎窗口关闭后)会留下一个白色空窗口。改为:透明度 0 地 Show+Hide,
-            // 窗口从未真正可见,但呈现源/布局已初始化,菜单可正常渲染。
-            mainWindow.Opacity = 0;
-            mainWindow.Show();
-            mainWindow.Hide();
-            mainWindow.Opacity = 1;
 
             // 首次启动:欢迎窗口已在构造函数里弹过并关闭,此时再显示设置窗口(内容已初始化,
             // 不会显示成白色空窗口)。

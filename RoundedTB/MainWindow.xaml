@@ -1,20 +1,22 @@
-﻿<Window x:Class="RoundedTB.MainWindow"
+﻿<ui:FluentWindow x:Class="RoundedTB.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RoundedTB"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:tb="http://www.hardcodet.net/taskbar"
-        xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
-        Style="{StaticResource UiWindow}"
         Title="RoundedTB Revived" Height="458" Width="718"
         Background="#20808080"
         d:Background="DarkGray"
         Visibility = "Hidden"
         Opacity="0.001"
         d:Opacity="1"
+        WindowBackdropType="Mica"
+        WindowCornerPreference="Round"
+        ExtendsContentIntoTitleBar="True"
         ResizeMode="NoResize"
         >
     <Window.Resources>
@@ -30,8 +32,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ContextMenu}">
-                        <Border Background="{DynamicResource TrayMenuBgBrush}"
-                                BorderBrush="{DynamicResource TrayMenuBorderBrush}"
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                             <ItemsPresenter/>
                         </Border>
@@ -69,7 +71,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <ContextMenu x:Name="TrayContextMenu" x:Key="TrayContextMenu" MouseEnter="ContextMenu_MouseEnter"
+        <ContextMenu x:Name="TrayContextMenu" x:Key="TrayContextMenu" MouseEnter="ContextMenu_MouseEnter" Opened="TrayContextMenu_Opened"
                      Style="{StaticResource TrayContextMenuStyle}">
             <MenuItem x:Name="StartupCheckBox" Header="{l:Loc Menu_RunAtStartup}" IsCheckable="True"
                       Click="Startup_Clicked" Style="{StaticResource TrayMenuItemStyle}"/>
@@ -88,9 +90,13 @@
             <RowDefinition />
         </Grid.RowDefinitions>
 
-        <!-- 托盘图标由 TrayIcon.cs(标准 Shell_NotifyIcon)自实现,不依赖 WPFUI 的 NotifyIcon
-             (WPFUI 版在 Win11 26H1 上图标不显示/错误)。右键菜单在 TrayContextMenu(Window.Resources)。 -->
-        <wpfui:TitleBar x:Name="mainTitleBar" Grid.Row="0" ApplicationNavigation="True" Margin="0,0,0,0" Title="{l:Loc Main_Title}" Icon="pack://application:,,,/RoundedTB.ico" Height="51" ShowMaximize="False"/>
+        <!-- 托盘图标:Hardcodet.NotifyIcon 的 TaskbarIcon(自带独立宿主窗口,菜单由它
+             弹出——不依赖主窗口显示,因此无需启动时 Show/Hide 预热,消除启动闪窗;
+             点击菜单外部由 Shell 自动关闭,不需要自实现的鼠标监控定时器)。 -->
+        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="RoundedTB Revived"
+                        ContextMenu="{StaticResource TrayContextMenu}"
+                        TrayLeftMouseUp="TrayIcon_TrayLeftMouseUp"/>
+        <ui:TitleBar x:Name="mainTitleBar" Grid.Row="0" Margin="0,0,0,0" Title="{l:Loc Main_Title}" Icon="pack://application:,,,/RoundedTB.ico" Height="51" ShowMaximize="False"/>
 
         <Grid Grid.Row="1">
 
@@ -103,9 +109,9 @@
 
 
 
-            <wpfui:Button x:Name="resetDefaultsButton" Appearance="Secondary" Margin="0,0,145,10" VerticalAlignment="Bottom" Content="{l:Loc Main_ResetDefaults}" Click="ResetToDefaults_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="160" Height="32"/>
-            <wpfui:Button x:Name="aboutButton" Appearance="Secondary" Margin="0,0,10,47" VerticalAlignment="Bottom" Content="{l:Loc Main_Help}" Click="aboutButton_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="133" Height="31"/>
-            <wpfui:Button x:Name="applyButton" Margin="0,0,10,10" VerticalAlignment="Bottom" Content="{l:Loc Main_Apply}" Click="ApplyButton_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="133" Height="32"/>
+            <ui:Button x:Name="resetDefaultsButton" Appearance="Secondary" Margin="0,0,145,10" VerticalAlignment="Bottom" Content="{l:Loc Main_ResetDefaults}" Click="ResetToDefaults_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="160" Height="32"/>
+            <ui:Button x:Name="aboutButton" Appearance="Secondary" Margin="0,0,10,47" VerticalAlignment="Bottom" Content="{l:Loc Main_Help}" Click="aboutButton_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="133" Height="31"/>
+            <ui:Button x:Name="applyButton" Margin="0,0,10,10" VerticalAlignment="Bottom" Content="{l:Loc Main_Apply}" Click="ApplyButton_Click" FontWeight="Normal" HorizontalAlignment="Right" Width="133" Height="32"/>
 
             <CheckBox x:Name="dynamicCheckBox" Content="{l:Loc Main_DynamicMode}" Margin="0,210,53,0" Checked="dynamicCheckBox_Checked" Unchecked="dynamicCheckBox_Unchecked" VerticalAlignment="Top" RenderTransformOrigin="1.763,4.069" Visibility="Visible" HorizontalAlignment="Right" Width="116"/>
             <CheckBox x:Name="showTrayCheckBox" Content="{l:Loc Main_ShowTraySegment}" Margin="0,210,44,0" VerticalAlignment="Top" HorizontalAlignment="Right" Width="134" Visibility="Hidden"/>
@@ -138,9 +144,9 @@
 
             <Grid x:Name="tbDiagramGrid" Margin="10,0,0,0" Height="247" VerticalAlignment="Top" HorizontalAlignment="Left" Width="486">
                 <Rectangle Stroke="#30242424" Fill="#20808080" RadiusX="5" RadiusY="5"/>
-                <wpfui:Button x:Name="taskbarRectStandIn" Margin="126,0,126,5" VerticalAlignment="Bottom" Click="taskbarRectStandIn_Click" Appearance="Primary" Height="32"/>
-                <wpfui:Button x:Name="trayRectStandIn" Margin="415,0,5,5" Click="trayRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
-                <wpfui:Button x:Name="widgetsRectStandIn" Margin="5,0,415,5" Click="widgetsRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
+                <ui:Button x:Name="taskbarRectStandIn" Margin="126,0,126,5" VerticalAlignment="Bottom" Click="taskbarRectStandIn_Click" Appearance="Primary" Height="32"/>
+                <ui:Button x:Name="trayRectStandIn" Margin="415,0,5,5" Click="trayRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
+                <ui:Button x:Name="widgetsRectStandIn" Margin="5,0,415,5" Click="widgetsRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
 
                 <Label Content="RoundedTB Revived" HorizontalAlignment="Center" Margin="0,59,0,108" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" FontSize="60" Opacity="0.75"/>
                 <Label Content="{l:Loc Main_ToBegin}" HorizontalAlignment="Center" Margin="0,138,0,75" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" FontSize="20" Opacity="0.75"/>
@@ -157,4 +163,4 @@
 
         </Grid>
     </Grid>
-</Window>
+</ui:FluentWindow>

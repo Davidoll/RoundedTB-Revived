@@ -14,7 +14,7 @@ using Windows.ApplicationModel;
 using System.Diagnostics;
 using Microsoft.Win32;
 using System.Text;
-using WPFUI;
+using Wpf.Ui.Controls;
 using System.Windows.Forms;
 using System.Windows.Media;
 
@@ -25,11 +25,15 @@ namespace RoundedTB
     ///
     /// Maintained by the RoundedTB Revived project.
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         public bool isWindows11;
         public List<Types.Taskbar> taskbarDetails = new List<Types.Taskbar>();
         public bool shouldReallyDieNoReally = false;
+        /// <summary>外部关闭请求(WM_CLOSE / WM_QUERYENDSESSION / WM_ENDSESSION)已到达。
+        /// WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,点叉与 Alt+F4 都会走到 OnClosing,
+        /// 需靠本标志区分:点叉=隐藏到托盘,外部关闭=真正退出并恢复任务栏。</summary>
+        private bool externalCloseReceived = false;
         public string configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb.json");
         public string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb.log");
         public Types.Settings activeSettings = new Types.Settings();
@@ -48,12 +52,10 @@ namespace RoundedTB
         // 上次托盘图标用的主题(null=未初始化)。初始必须为 null:若初始为 false,暗色主题(light=false)
         // 的首次 TrayIconCheck 会被当成"主题没变"而 return,导致托盘图标从不创建。
         private bool? _lastTrayLight = null;
-        private TrayIcon _trayIcon;              // 自实现 Shell_NotifyIcon 托盘图标
         private System.Drawing.Icon _trayIconImage; // 当前托盘图标句柄持有者(避免句柄被 GC 回收)
         // 托盘右键菜单里的控件(ContextMenu 在 Window.Resources,Resources 里的 x:Name 不生成字段,
         // 需在构造里通过 FindName 提取)。
         private bool _isRestoringUi = false; // 恢复配置到 UI 控件时置位,避免触发 Checked 事件副作用(如弹 TTB 兼容窗口)
-        private System.Windows.Threading.DispatcherTimer _trayMenuWatchTimer; // 托盘菜单外点击自动关闭的鼠标监控
         private System.Windows.Controls.MenuItem StartupCheckBox;
         private System.Windows.Controls.MenuItem ShowMenuItem;
         private System.Windows.Controls.MenuItem ResetDefaultsMenuItem;
@@ -76,8 +78,6 @@ namespace RoundedTB
 
         public MainWindow()
         {
-            WPFUI.Background.Manager.Apply(WPFUI.Background.BackgroundType.Mica, this);
-
             InitializeComponent();
 
             // 提取托盘右键菜单里的控件(Resources 里的 x:Name 不生成字段,且 FindName 在
@@ -93,14 +93,20 @@ namespace RoundedTB
 
             // 按构建通道设置标题栏图标(Icon 需要 ImageSource;x:Static 返回 string 会抛异常,
             // 因此用代码设置 BitmapImage)
-            mainTitleBar.Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(ChannelInfo.IconUri));
+            mainTitleBar.Icon = new Wpf.Ui.Controls.ImageIcon { Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(ChannelInfo.IconUri)) };
 
-            // 右上角关闭按钮 = 只隐藏设置窗口,程序继续在托盘运行(对齐 R3.1 / ModernWpf 行为)。
-            // WPFUI 的 TitleBar 在 ApplicationNavigation 模式下,关闭按钮默认会直接 Application.Shutdown(),
-            // 必须用 CloseActionOverride 接管。注意:它传的是内部 _parent 字段(懒赋值,可能为 null),需防御。
-            mainTitleBar.CloseActionOverride = (tb, win) =>
+            // 右上角关闭按钮 = 只隐藏设置窗口,程序继续在托盘运行(对齐 R3.1 行为)。
+            // WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,关闭按钮直接触发 Window.Close(),
+            // 因此在 OnClosing 里拦截:未置 shouldReallyDieNoReally/externalCloseReceived 时取消并隐藏。
+            Loaded += (s, e) =>
             {
-                (win ?? Window.GetWindow(tb) ?? this).Hide();
+                // Mica 背景(WPF-UI 4.x 由窗口 WindowBackdropType 驱动)并开始跟随系统主题
+                // (替代 1.x 的全局 WPFUI.Theme.Watcher.Start())。
+                Wpf.Ui.Appearance.WindowBackgroundManager.UpdateBackground(
+                    this,
+                    Wpf.Ui.Appearance.ApplicationThemeManager.GetAppTheme(),
+                    Wpf.Ui.Controls.WindowBackdropType.Mica);
+                Wpf.Ui.Appearance.SystemThemeWatcher.Watch(this, Wpf.Ui.Controls.WindowBackdropType.Mica, true);
             };
 
 
@@ -123,26 +129,27 @@ namespace RoundedTB
             background = new Background(this);
             interaction = new Interaction(this);
 
-            // 自实现托盘图标 + Win+F2 热键:直接在构造里初始化,不依赖 SourceInitialized/
-            // OnSourceInitialized——Hidden 窗口从不触发该事件,这是托盘图标"死活看不到"的根因。
+            // 窗口句柄 + Win+F2 热键:直接在构造里初始化,不依赖 SourceInitialized/
+            // OnSourceInitialized——Hidden 窗口从不触发该事件。
             // EnsureHandle() 强制创建窗口 HWND(Hidden 窗口下 .Handle 可能返回 0)。
+            // (托盘图标/菜单已改由 XAML 的 TaskbarIcon 提供,用自己的宿主窗口,与本窗口无关。)
             IntPtr trayHandle = new WindowInteropHelper(this).EnsureHandle();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb-tray.log"), $"[{DateTime.Now:HH:mm:ss.fff}] TRAY-init-begin handle=0x{trayHandle.ToInt64():X}\n"); } catch { }
             source = HwndSource.FromHwnd(trayHandle);
             source.AddHook(interaction.HwndHook);
-            _trayIcon = new TrayIcon(trayHandle);
+            // 区分"点叉"(隐藏到托盘)与外部关闭(Alt+F4 / 任务管理器 / 注销关机 → 真正退出):
+            // WPF-UI 4.x 无 TitleBar.CloseActionOverride,标题栏按钮走 Window.Close()(不产生
+            // WM_CLOSE),Alt+F4 与系统注销则发 WM_CLOSE/WM_QUERYENDSESSION,以此区分。
+            const int WM_CLOSE_MSG = 0x0010;
+            const int WM_QUERYENDSESSION = 0x0011;
+            const int WM_ENDSESSION = 0x0022;
             source.AddHook((IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) =>
             {
-                if (_trayIcon != null && _trayIcon.HandleWindowMessage(h, msg, w, l))
+                if (msg == WM_CLOSE_MSG || msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION)
                 {
-                    handled = true;
+                    externalCloseReceived = true;
                 }
                 return IntPtr.Zero;
             });
-            _trayIcon.LeftClick += () => Dispatcher.Invoke(() => ShowMenuItem_Click(null, null));
-            _trayIcon.RightClick += () => Dispatcher.Invoke(ShowTrayMenu);
-            _trayIcon.Show();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb-tray.log"), $"[{DateTime.Now:HH:mm:ss.fff}] TRAY-Show-called\n"); } catch { }
             TrayIconCheck(); // 首次设置托盘图标(按主题)
             LocalPInvoke.RegisterHotKey(trayHandle, 9000, 0x8, 0x71);
             Visibility = Visibility.Hidden;
@@ -500,7 +507,7 @@ namespace RoundedTB
                 }
                 _lastTrayLight = light;
 
-                if (_trayIcon != null)
+                if (TrayIcon != null)
                 {
                     // 加载主题对应的托盘图标(TrayLight.ico=黑/TrayDark.ico=白)并设置到 Shell_NotifyIcon。
                     // 注意:pack URI 资源匹配大小写敏感,必须与 res/ 下实际文件名一致(此前小写
@@ -514,7 +521,7 @@ namespace RoundedTB
                         _trayIconImage = new System.Drawing.Icon(iconStream);
                     }
                     // 必须保留 _trayIconImage 引用,否则图标句柄被 GC 回收后托盘图标消失。
-                    _trayIcon.SetIcon(_trayIconImage.Handle, "RoundedTB Revived");
+                    TrayIcon.Icon = _trayIconImage;
                 }
             }
             catch (Exception ex)
@@ -634,9 +641,10 @@ namespace RoundedTB
         }
 
         /// <summary>
-        /// 弹出托盘右键菜单:按系统亮暗主题设置菜单颜色;设 PlacementTarget 保证点击菜单外能自动关闭。
+        /// 托盘右键菜单打开时按系统亮暗主题设置菜单颜色(Hardcodet TaskbarIcon 显示菜单时触发)。
+        /// 菜单弹出与"点击外部关闭"由 Hardcodet/Shell 负责,不再需要自实现鼠标监控定时器。
         /// </summary>
-        private void ShowTrayMenu()
+        private void TrayContextMenu_Opened(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -652,61 +660,46 @@ namespace RoundedTB
                 }
                 catch (Exception) { }
 
-                Resources["TrayMenuBgBrush"] = new System.Windows.Media.SolidColorBrush(
+                var bgBrush = new System.Windows.Media.SolidColorBrush(
                     light ? System.Windows.Media.Color.FromRgb(0xFA, 0xFA, 0xFA) : System.Windows.Media.Color.FromRgb(0x20, 0x20, 0x20));
-                Resources["TrayMenuBorderBrush"] = new System.Windows.Media.SolidColorBrush(
+                var borderBrush = new System.Windows.Media.SolidColorBrush(
                     light ? System.Windows.Media.Color.FromRgb(0xD0, 0xD0, 0xD0) : System.Windows.Media.Color.FromRgb(0x3D, 0x3D, 0x3D));
-                Resources["TrayMenuFgBrush"] = new System.Windows.Media.SolidColorBrush(
+                var fgBrush = new System.Windows.Media.SolidColorBrush(
                     light ? System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x1A) : System.Windows.Media.Color.FromRgb(0xE8, 0xE8, 0xE8));
-                Resources["TrayMenuHoverBrush"] = new System.Windows.Media.SolidColorBrush(
+                var hoverBrush = new System.Windows.Media.SolidColorBrush(
                     light ? System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0) : System.Windows.Media.Color.FromRgb(0x3D, 0x3D, 0x3D));
 
-                var trayMenu = (System.Windows.Controls.ContextMenu)FindResource("TrayContextMenu");
-                trayMenu.PlacementTarget = this;
-                trayMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
-                trayMenu.IsOpen = true;
+                // 直接设 ContextMenu/MenuItem 颜色(模板用 TemplateBinding 跟随),不用 DynamicResource——
+                // Hardcodet 弹出的菜单资源上下文不同,DynamicResource 可能解析不到。
+                Resources["TrayMenuBgBrush"] = bgBrush;
+                Resources["TrayMenuBorderBrush"] = borderBrush;
+                Resources["TrayMenuFgBrush"] = fgBrush;
+                Resources["TrayMenuHoverBrush"] = hoverBrush;
 
-                // 托盘应用的 WPF ContextMenu 默认点击外部不关闭,启动鼠标监控:
-                // 检测到鼠标移出菜单窗口即关闭(行为同系统 TrackPopupMenu / TTB)。
-                _trayMenuWatchTimer?.Stop();
-                _trayMenuWatchTimer = new System.Windows.Threading.DispatcherTimer();
-                _trayMenuWatchTimer.Interval = TimeSpan.FromMilliseconds(100);
-                _trayMenuWatchTimer.Tick += (s, ev) =>
+                var trayMenu = (System.Windows.Controls.ContextMenu)FindResource("TrayContextMenu");
+                if (trayMenu != null)
                 {
-                    var menu = (System.Windows.Controls.ContextMenu)FindResource("TrayContextMenu");
-                    if (menu == null || !menu.IsOpen)
+                    trayMenu.Background = bgBrush;
+                    trayMenu.BorderBrush = borderBrush;
+                    trayMenu.Foreground = fgBrush;
+                    foreach (var item in trayMenu.Items)
                     {
-                        _trayMenuWatchTimer.Stop();
-                        _trayMenuWatchTimer = null;
-                        return;
-                    }
-                    var src = System.Windows.PresentationSource.FromVisual(menu) as System.Windows.Interop.HwndSource;
-                    if (src == null)
-                    {
-                        return;
-                    }
-                    LocalPInvoke.GetWindowRect(src.Handle, out LocalPInvoke.RECT rect);
-                    LocalPInvoke.GetCursorPos(out LocalPInvoke.POINT pt);
-                    bool mouseOutside =
-                        pt.x < rect.Left || pt.x > rect.Right || pt.y < rect.Top || pt.y > rect.Bottom;
-                    if (mouseOutside)
-                    {
-                        // 仅在菜单外"点击"(左/右键按下)才关闭;鼠标只是移出悬停别处不关闭。
-                        bool leftDown = (LocalPInvoke.GetAsyncKeyState(0x01) & 0x8000) != 0;
-                        bool rightDown = (LocalPInvoke.GetAsyncKeyState(0x02) & 0x8000) != 0;
-                        if (leftDown || rightDown)
+                        if (item is System.Windows.Controls.MenuItem mi)
                         {
-                            menu.IsOpen = false;
-                            _trayMenuWatchTimer.Stop();
-                            _trayMenuWatchTimer = null;
+                            mi.Foreground = fgBrush;
                         }
                     }
-                };
-                _trayMenuWatchTimer.Start();
+                }
             }
             catch (Exception)
             {
             }
+        }
+
+        /// <summary>托盘图标左键点击:显示/隐藏设置窗口。</summary>
+        private void TrayIcon_TrayLeftMouseUp(object sender, RoutedEventArgs e)
+        {
+            ShowMenuItem_Click(null, null);
         }
 
         /// <summary>
@@ -782,7 +775,7 @@ namespace RoundedTB
             {
                 try
                 {
-                    _trayIcon?.SetTip(string.IsNullOrEmpty(status) ? "RoundedTB Revived" : status);
+                    if (TrayIcon != null) TrayIcon.ToolTipText = string.IsNullOrEmpty(status) ? "RoundedTB Revived" : status;
                 }
                 catch (Exception)
                 {
@@ -795,7 +788,17 @@ namespace RoundedTB
         {
             base.OnClosing(e);
 
-            // 点叉已被 mainTitleBar.CloseActionOverride 拦截为 Hide,不会走到这里。
+            // 点叉 = 只隐藏窗口,程序继续在托盘运行(对齐 R3.1 行为)。
+            // WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,标题栏关闭按钮直接触发
+            // Window.Close()(不产生 WM_CLOSE),与 Alt+F4/任务管理器/注销关机都走这里,
+            // 靠 externalCloseReceived 区分:点叉 → 隐藏;外部关闭 → 真正退出。
+            if (!shouldReallyDieNoReally && !externalCloseReceived)
+            {
+                e.Cancel = true;
+                Visibility = Visibility.Hidden;
+                return;
+            }
+
             // 走到这里 = 外部 WM_CLOSE(任务管理器"结束任务"/Alt+F4/系统注销关机)或托盘 Exit。
             // 一律恢复任务栏并退出:若仅隐藏,任务管理器会判定"未响应"并强制结束进程
             // (TerminateProcess,无法捕获),导致任务栏 region 残留、托盘图标随进程消失。
@@ -841,7 +844,7 @@ namespace RoundedTB
             // 清理托盘图标(Shell_NotifyIcon NIM_DELETE)
             try
             {
-                _trayIcon?.Dispose();
+                TrayIcon?.Dispose();
                 _trayIconImage?.Dispose();
             }
             catch (Exception)
@@ -1196,9 +1199,9 @@ namespace RoundedTB
 
         private void taskbarRectStandIn_Click(object sender, RoutedEventArgs e)
         {
-            taskbarRectStandIn.Appearance = WPFUI.Common.Appearance.Primary;
-            trayRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
-            widgetsRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
+            taskbarRectStandIn.Appearance = ControlAppearance.Primary;
+            trayRectStandIn.Appearance = ControlAppearance.Secondary;
+            widgetsRectStandIn.Appearance = ControlAppearance.Secondary;
             dynamicCheckBox.Visibility = Visibility.Visible;
             showTrayCheckBox.Visibility = Visibility.Hidden;
             showWidgetsCheckBox.Visibility = Visibility.Hidden;
@@ -1229,9 +1232,9 @@ namespace RoundedTB
 
         private void trayRectStandIn_Click(object sender, RoutedEventArgs e)
         {
-            taskbarRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
-            trayRectStandIn.Appearance = WPFUI.Common.Appearance.Primary;
-            widgetsRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
+            taskbarRectStandIn.Appearance = ControlAppearance.Secondary;
+            trayRectStandIn.Appearance = ControlAppearance.Primary;
+            widgetsRectStandIn.Appearance = ControlAppearance.Secondary;
             dynamicCheckBox.Visibility = Visibility.Hidden;
             showTrayCheckBox.Visibility = Visibility.Visible;
             showWidgetsCheckBox.Visibility = Visibility.Hidden;
@@ -1248,9 +1251,9 @@ namespace RoundedTB
 
         private void widgetsRectStandIn_Click(object sender, RoutedEventArgs e)
         {
-            taskbarRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
-            trayRectStandIn.Appearance = WPFUI.Common.Appearance.Secondary;
-            widgetsRectStandIn.Appearance = WPFUI.Common.Appearance.Primary;
+            taskbarRectStandIn.Appearance = ControlAppearance.Secondary;
+            trayRectStandIn.Appearance = ControlAppearance.Secondary;
+            widgetsRectStandIn.Appearance = ControlAppearance.Primary;
             dynamicCheckBox.Visibility = Visibility.Hidden;
             showTrayCheckBox.Visibility = Visibility.Hidden;
             showWidgetsCheckBox.Visibility = Visibility.Visible;

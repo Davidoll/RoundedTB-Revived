@@ -17,7 +17,6 @@ namespace RoundedTB
         int settingsRequestCount = 0; // 单实例"设置请求"窗口枚举的低频计数(每 3 次 infrequent 一次)
         int loopLogCount = 0; // [DEBUG] 节流状态日志计数
         bool lastFilled = false; // [DEBUG] 上一次 fill 判定,用于记录状态迁移(Alt+Tab 验证)
-        string lastOverlaySig = null; // [DEBUG] 上一次 XAML 覆盖层签名,变化时记录(定位 win+tab 检测失败)
 
         // 移植自 gniang (Phase 1):句柄缺失(Explorer 崩溃/重启)时指数退避重建,
         // 而不是每 100ms 重建 CUIAutomation + AppListXaml 直到它回来。
@@ -174,10 +173,12 @@ namespace RoundedTB
                             // Get the latest quick details of this taskbar
                             Types.Taskbar newTaskbar = Taskbar.GetQuickTaskbarRects(taskbars[current].TaskbarHwnd, taskbars[current].TrayHwnd, taskbars[current].AppListHwnd);
 
-                            // [DEBUG] 每 10 帧输出一次主循环状态,用于定位悬停/最大化恢复不工作
+                            // [DEBUG] 每 10 帧输出一次主循环状态,用于定位悬停/最大化恢复不工作。
+                            // 复用下面已算出的 fill 状态,不再单独调用 TaskbarShouldBeFilled
+                            // (它内部会枚举全部顶层窗口,重复调用在 VerboseLogging 通道下是持续开销)。
                             if (ChannelInfo.VerboseLogging && loopLogCount++ % 10 == 0)
                             {
-                                mw.interaction.AddLog($"bw[{current}]: segHover={settings.ShowSegmentsOnHover} trayLeft={taskbars[current].TrayRect.Left} trayRect=({taskbars[current].TrayRect.Left},{taskbars[current].TrayRect.Top})-({taskbars[current].TrayRect.Right},{taskbars[current].TrayRect.Bottom}) dyn={settings.IsDynamic} fill={Taskbar.TaskbarShouldBeFilled(taskbars[current].TaskbarHwnd, settings)}");
+                                mw.interaction.AddLog($"[bw] taskbar {current}: hover={settings.ShowSegmentsOnHover} tray=({taskbars[current].TrayRect.Left},{taskbars[current].TrayRect.Top})-({taskbars[current].TrayRect.Right},{taskbars[current].TrayRect.Bottom}) dyn={settings.IsDynamic}");
                             }
 
 
@@ -200,55 +201,13 @@ namespace RoundedTB
                                     }
                                 }
                                 catch { }
-                                mw.interaction.AddLog($"[fill] taskbar {current}: {lastFilled} -> {shouldFill} (alttab/overlay={Taskbar.IsAltTabOverlayOpenForLog(taskbars[current].TaskbarHwnd)}, fg={fgClass})");
+                                mw.interaction.AddLog($"[fill] taskbar {current}: {lastFilled} -> {shouldFill} (fg={fgClass})");
                                 lastFilled = shouldFill;
                             }
-                            // [DEBUG] XAML 覆盖层扫描:记录所有 Xaml/Island/TaskView 类顶层窗口,
-                            // 以及任何"可见且覆盖整个工作区"的顶层窗口(无论类名——任务视图可能用别的类名),
-                            // 签名变化时记一条。定位 win+tab 覆盖层为何未命中 IsAltTabOverlayOpen。
-                            if (ChannelInfo.VerboseLogging)
-                            {
-                                StringBuilder ovlSig = new StringBuilder();
-                                LocalPInvoke.RECT ovlWork = new LocalPInvoke.RECT();
-                                try
-                                {
-                                    // 任务栏监视器的工作区(检测判据的参照系)
-                                    LocalPInvoke.MONITORINFO ovlMi = new LocalPInvoke.MONITORINFO();
-                                    ovlMi.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(LocalPInvoke.MONITORINFO));
-                                    IntPtr ovlMon = LocalPInvoke.MonitorFromWindow(taskbars[current].TaskbarHwnd, LocalPInvoke.MONITOR_DEFAULTTONEAREST);
-                                    if (LocalPInvoke.GetMonitorInfo(ovlMon, ref ovlMi))
-                                    {
-                                        ovlWork = ovlMi.rcWork;
-                                        ovlSig.Append($"work=({ovlWork.Left},{ovlWork.Top})-({ovlWork.Right},{ovlWork.Bottom});");
-                                    }
-                                    LocalPInvoke.GetWindowRect(taskbars[current].TaskbarHwnd, out LocalPInvoke.RECT ovlTbRect);
-                                    ovlSig.Append($"tb=({ovlTbRect.Left},{ovlTbRect.Top})-({ovlTbRect.Right},{ovlTbRect.Bottom});");
-                                    List<IntPtr> ovlWins = Interaction.GetTopLevelWindows();
-                                    foreach (IntPtr oh in ovlWins)
-                                    {
-                                        StringBuilder oc = new StringBuilder(1024);
-                                        LocalPInvoke.GetClassName(oh, oc, 1024);
-                                        string oname = oc.ToString();
-                                        bool ovis = LocalPInvoke.IsWindowVisible(oh);
-                                        LocalPInvoke.RECT or = new LocalPInvoke.RECT();
-                                        LocalPInvoke.GetWindowRect(oh, out or);
-                                        bool isXaml = oname.Contains("Xaml") || oname.Contains("Island") || oname.Contains("TaskView");
-                                        // 可见且完全覆盖工作区的窗口(潜在 overlay,不论类名)
-                                        bool coversWork = ovis &&
-                                            or.Left <= ovlWork.Left && or.Top <= ovlWork.Top &&
-                                            or.Right >= ovlWork.Right && or.Bottom >= ovlWork.Bottom;
-                                        if (!isXaml && !coversWork) continue;
-                                        ovlSig.Append($"{oh.ToInt64():X}:{oname}:({or.Left},{or.Top})-({or.Right},{or.Bottom}):vis={ovis};");
-                                    }
-                                }
-                                catch { }
-                                string sig = ovlSig.ToString();
-                                if (sig != lastOverlaySig)
-                                {
-                                    mw.interaction.AddLog($"[ovl] {sig}");
-                                    lastOverlaySig = sig;
-                                }
-                            }
+                            // 说明:定位 win+tab 检测问题用的 [ovl] 覆盖层全窗口扫描诊断已移除。
+                            // 它每 100ms 枚举所有顶层窗口并逐个 GetClassName/GetWindowRect,在
+                            // VerboseLogging 开启的通道(Canary/Dev)下是持续开销(长时间运行的
+                            // 额外负担)。fill 状态迁移日志 [fill] 保留(只在翻转时记一条)。
                             if (shouldFill)
                             {
                                 if (taskbars[current].Ignored == false)
@@ -280,10 +239,13 @@ namespace RoundedTB
                                     LocalPInvoke.GetCursorPos(out LocalPInvoke.POINT msPt);
                                     bool isHoveringOverTray = LocalPInvoke.PtInRect(ref currentTrayRect, msPt);
                                     bool isHoveringOverWidgets = LocalPInvoke.PtInRect(ref currentWidgetsRect, msPt);
-                                    // [DEBUG] hover 诊断(仅预发布通道保留)
-                                    if (ChannelInfo.VerboseLogging)
+                                    // [DEBUG] hover 诊断:只在状态翻转时记一条。原先每帧写一行
+                                    // (AddLog 每次都会开关日志文件),悬停/动态模式下会产生海量追加写,
+                                    // 长时间运行会拖慢自身与 Explorer 的交互。
+                                    if (ChannelInfo.VerboseLogging &&
+                                        (isHoveringOverTray != hoverShowTray || isHoveringOverWidgets != hoverShowWidgets))
                                     {
-                                        mw.interaction.AddLog($"hover: tray=({currentTrayRect.Left},{currentTrayRect.Top})-({currentTrayRect.Right},{currentTrayRect.Bottom}) mouse=({msPt.x},{msPt.y}) hoverTray={isHoveringOverTray} hoverShowTray={hoverShowTray} dyn={settings.IsDynamic}");
+                                        mw.interaction.AddLog($"[hover] taskbar {current}: mouse=({msPt.x},{msPt.y}) overTray={isHoveringOverTray} overWidgets={isHoveringOverWidgets} trayShown={hoverShowTray} widgetsShown={hoverShowWidgets}");
                                     }
                                     if (isHoveringOverTray && !hoverShowTray)
                                     {
@@ -360,9 +322,11 @@ namespace RoundedTB
                                 Debug.WriteLine($"Refresh required on taskbar {current}");
                                 taskbars[current].Ignored = false;
                                 int isFullTest = newTaskbar.TrayRect.Left - newTaskbar.AppListRect.Right;
-                                if (ChannelInfo.VerboseLogging)
+                                // 诊断日志按 loopLogCount 节流:该分支在悬停/动态模式下会被频繁重放,
+                                // 每次写日志都要开关文件,长时间运行是明显的额外负担。
+                                if (ChannelInfo.VerboseLogging && loopLogCount % 10 == 0)
                                 {
-                                    mw.interaction.AddLog($"Taskbar: {current} - AppList ends: {newTaskbar.AppListRect.Right} - Tray starts: {newTaskbar.TrayRect.Left} - Total gap: {isFullTest}");
+                                    mw.interaction.AddLog($"[taskbar] {current}: appListEnd={newTaskbar.AppListRect.Right} trayStart={newTaskbar.TrayRect.Left} gap={isFullTest}");
                                 }
                                 if (!settings.IsDynamic || (isFullTest <= taskbars[current].ScaleFactor * 25 && isFullTest > 0 && newTaskbar.TrayRect.Left != 0))
                                 {
@@ -371,9 +335,9 @@ namespace RoundedTB
                                     taskbars[current].AppListRect = newTaskbar.AppListRect;
                                     taskbars[current].TrayRect = newTaskbar.TrayRect;
                                     Taskbar.UpdateSimpleTaskbar(taskbars[current], effectiveSettings);
-                                    if (ChannelInfo.VerboseLogging)
+                                    if (ChannelInfo.VerboseLogging && loopLogCount % 10 == 0)
                                     {
-                                        mw.interaction.AddLog($"Updated taskbar {current} simply");
+                                        mw.interaction.AddLog($"[apply] taskbar {current}: simple");
                                     }
                                 }
                                 else
@@ -385,9 +349,9 @@ namespace RoundedTB
                                         taskbars[current].AppListRect = newTaskbar.AppListRect;
                                         taskbars[current].TrayRect = newTaskbar.TrayRect;
                                         Taskbar.UpdateDynamicTaskbar(taskbars[current], effectiveSettings);
-                                        if (ChannelInfo.VerboseLogging)
+                                        if (ChannelInfo.VerboseLogging && loopLogCount % 10 == 0)
                                         {
-                                            mw.interaction.AddLog($"Updated taskbar {current} dynamically");
+                                            mw.interaction.AddLog($"[apply] taskbar {current}: dynamic");
                                         }
                                     }
                                 }

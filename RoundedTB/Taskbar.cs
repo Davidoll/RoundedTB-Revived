@@ -655,6 +655,13 @@ namespace RoundedTB
         //(100ms 采样下经常来不及连续命中两次),加 200ms 宽限消除开关瞬间的抖动。
         private static long _lastOverlayHitTicks = -1000;
 
+        // 判据 2 的全窗口枚举结果缓存(带 TTL)。本方法每 100ms 调用一次,而枚举全部顶层
+        // 窗口 + 逐个 GetClassName 是这里最贵的操作;Alt+Tab/Win+Tab 界面至少持续数百毫秒,
+        // 用 250ms 的缓存既能命中又显著降低长跑开销(同时减少与 Explorer 的窗口枚举交互)。
+        private static bool _overlayEnumCached;
+        private static long _overlayEnumNextTicks;
+        private const int OverlayEnumCacheMs = 250;
+
         /// <summary>
         /// 判断 Alt+Tab / 任务视图(Win+Tab)是否真的打开。
         ///
@@ -723,31 +730,41 @@ namespace RoundedTB
 
                 // 判据 2:枚举到可见的 XamlExplorerHostIslandWindow 覆盖工作区/任务栏。
                 // 覆盖 Alt+Tab 等不抢前台、但 island 窗口可见的场景。
+                // 结果按 OverlayEnumCacheMs 缓存:这是本方法最贵的分支(枚举全部顶层窗口),
+                // 而界面至少持续数百毫秒,无需每 100ms 重新枚举。
                 if (!hit)
                 {
-                    List<IntPtr> windows = Interaction.GetTopLevelWindows();
-                    foreach (IntPtr hwnd in windows)
+                    long now = System.Environment.TickCount64;
+                    if (now >= _overlayEnumNextTicks)
                     {
-                        if (!LocalPInvoke.IsWindowVisible(hwnd)) continue;
-
-                        StringBuilder cls = new StringBuilder(1024);
-                        LocalPInvoke.GetClassName(hwnd, cls, 1024);
-                        if (cls.ToString() != "XamlExplorerHostIslandWindow") continue;
-
-                        LocalPInvoke.GetWindowRect(hwnd, out LocalPInvoke.RECT r);
-                        // 覆盖工作区(新 build:工作区大小界面)或覆盖整个任务栏(旧 build:全屏界面)。
-                        bool coversWorkArea =
-                            r.Left <= work.Left && r.Top <= work.Top &&
-                            r.Right >= work.Right && r.Bottom >= work.Bottom;
-                        bool coversTaskbar =
-                            r.Left <= taskbarRect.Left && r.Top <= taskbarRect.Top &&
-                            r.Right >= taskbarRect.Right && r.Bottom >= taskbarRect.Bottom;
-                        if (coversWorkArea || coversTaskbar)
+                        bool enumHit = false;
+                        List<IntPtr> windows = Interaction.GetTopLevelWindows();
+                        foreach (IntPtr hwnd in windows)
                         {
-                            hit = true;
-                            break;
+                            if (!LocalPInvoke.IsWindowVisible(hwnd)) continue;
+
+                            StringBuilder cls = new StringBuilder(1024);
+                            LocalPInvoke.GetClassName(hwnd, cls, 1024);
+                            if (cls.ToString() != "XamlExplorerHostIslandWindow") continue;
+
+                            LocalPInvoke.GetWindowRect(hwnd, out LocalPInvoke.RECT r);
+                            // 覆盖工作区(新 build:工作区大小界面)或覆盖整个任务栏(旧 build:全屏界面)。
+                            bool coversWorkArea =
+                                r.Left <= work.Left && r.Top <= work.Top &&
+                                r.Right >= work.Right && r.Bottom >= work.Bottom;
+                            bool coversTaskbar =
+                                r.Left <= taskbarRect.Left && r.Top <= taskbarRect.Top &&
+                                r.Right >= taskbarRect.Right && r.Bottom >= taskbarRect.Bottom;
+                            if (coversWorkArea || coversTaskbar)
+                            {
+                                enumHit = true;
+                                break;
+                            }
                         }
+                        _overlayEnumCached = enumHit;
+                        _overlayEnumNextTicks = now + OverlayEnumCacheMs;
                     }
+                    hit = _overlayEnumCached;
                 }
 
                 if (hit)
@@ -768,15 +785,6 @@ namespace RoundedTB
         }
 
         /// <summary>
-        /// [DEBUG] 公开包装:供 Background 的 fill 状态迁移日志调用,报告覆盖层检测是否命中。
-        /// 与私有 IsAltTabOverlayOpen 同逻辑,但允许 Background 跨类访问。
-        /// </summary>
-        public static bool IsAltTabOverlayOpenForLog(IntPtr taskbarHwnd)
-        {
-            return IsAltTabOverlayOpen(taskbarHwnd);
-        }
-
-        /// <summary>
         /// Gets the real horizontal span of the taskbar's app-list content (Start button, search,
         /// task view and app buttons) via UI Automation. On Windows 11 22H2+ the content is rendered
         /// by the taskbar's XAML island and the legacy window rects no longer track it.
@@ -789,9 +797,11 @@ namespace RoundedTB
         {
             contentLeft = -1;
             contentRight = -1;
+            AutomationElement taskbarElement = null;
+            AutomationElementCollection allElements = null;
             try
             {
-                AutomationElement taskbarElement = AutomationElement.FromHandle(taskbar.TaskbarHwnd);
+                taskbarElement = AutomationElement.FromHandle(taskbar.TaskbarHwnd);
                 if (taskbarElement == null)
                 {
                     return false;
@@ -800,7 +810,8 @@ namespace RoundedTB
                 int minLeft = int.MaxValue;
                 int maxRight = int.MinValue;
                 bool found = false;
-                foreach (AutomationElement element in taskbarElement.FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition))
+                allElements = taskbarElement.FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition);
+                foreach (AutomationElement element in allElements)
                 {
                     string automationId;
                     try { automationId = element.Current.AutomationId; }
@@ -834,6 +845,48 @@ namespace RoundedTB
             catch (Exception)
             {
                 return false;
+            }
+            finally
+            {
+                // 释放 UIA 的 COM 对象:FindAll 会为任务栏每个后代返回一个 AutomationElement,
+                // Win11 任务栏有数百个,本方法在 infrequent tick(~1s)与每次 region 重绘时都会调用。
+                // 不释放会让 RCW 持续累积,长时间运行后拖慢/卡住与 Explorer 的 UIA 交互。
+                ReleaseUiaCollection(allElements);
+                ReleaseComObject(taskbarElement);
+            }
+        }
+
+        /// <summary>逐个释放 AutomationElementCollection 里的 COM 对象(见 finally 里的说明)。</summary>
+        private static void ReleaseUiaCollection(AutomationElementCollection collection)
+        {
+            if (collection == null) return;
+            try
+            {
+                foreach (AutomationElement element in collection)
+                {
+                    ReleaseComObject(element);
+                }
+            }
+            catch (Exception)
+            {
+                // 释放失败不影响测量结果
+            }
+        }
+
+        /// <summary>释放单个 COM 对象(托管对象/非 COM 对象会被安全忽略)。</summary>
+        private static void ReleaseComObject(object comObject)
+        {
+            if (comObject == null) return;
+            try
+            {
+                if (System.Runtime.InteropServices.Marshal.IsComObject(comObject))
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(comObject);
+                }
+            }
+            catch (Exception)
+            {
+                // 已被释放/非 COM 对象
             }
         }
 
