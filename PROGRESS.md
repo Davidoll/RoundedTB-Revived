@@ -77,6 +77,29 @@
   - csproj:移除 Compatibility/UpgradeAssistant/PInvoke.User32/DataSetExtensions/Hardcodet 包 +
     Remote Debug Z:\ 路径 + ClickOnce 残留;构建 0 错误(SC 体积降幅有限,主因是 runtime)。
   - Interaction/Background 构造器改显式注入 `MainWindow`,消除原版 TODO 空 catch(mw 不再静默 null)。
+- **R4.1.3 批次(2026-08-24,Alt+Tab/Win+Tab 任务栏恢复修复 + Inno 安装器)**:
+  - **Alt+Tab/Win+Tab 恢复任务栏表现与最大化不一致**(分支 `fix-alttab-restore`,基于
+    `R4.1.2-hotfix` tag 的 `c852f3c`,提交 `05c98fd`):勾选"按下 Alt+Tab/Win+Tab 时恢复任务栏"
+    后,按键时任务栏只剩中间段、左右两段不显示,而最大化恢复时正常。
+    根因(实测 Win11 build 28000,窗口枚举探针确认):Alt+Tab/任务视图覆盖层是**工作区大小**
+    (`(0,0)-(1920,1020)`,底边正好贴在任务栏顶边 y=1020),**并不覆盖任务栏那一段**,而旧判据
+    要求 `XamlExplorerHostIslandWindow` **完全覆盖任务栏矩形**(1020 ≥ 1080 恒 false)→ 覆盖层
+    检测恒 false → `FillOnTaskSwitch` 从不触发 → 任务栏停在动态(仅中间段)模式。另有两点干扰:
+    任务视图打开时前台只**短暂约 1 帧**变成 island 窗口(此时 `IsWindowVisible` 仍为 false),
+    以及常驻全屏 `Windows.UI.Core.CoreWindow`(UWP 通用宿主,与任务视图无关)。
+    修复 `Taskbar.IsAltTabOverlayOpen` 改三重判据(满足其一即命中):① 前台窗口是任务视图宿主
+    (`XamlExplorerHostIslandWindow` 不要求可见,或可见的全屏 `Windows.UI.Core.CoreWindow`)且
+    覆盖工作区或任务栏;② 枚举到可见 island 覆盖工作区(新 build)或任务栏(旧 build,兼容);
+    ③ 200ms 宽限(最近命中后短期内仍视为打开)平滑单帧抖动。新增 `GetMonitorInfo`/`MONITORINFO`
+    P/Invoke;诊断日志 `[fill]`(fill 状态迁移,含前台类名)/`[ovl]`(覆盖层窗口签名)受
+    `VerboseLogging` 门控(Canary 保留、正式版关闭)。
+  - **Inno Setup 安装器**(分支 `installer`,`80c405c`/`1a3c3e3`/`ca2e258`/`7e982cc`):每用户
+    安装(`{localappdata}\RoundedTB` + HKCU,无 UAC)、6 个安装器(x64/x86/arm64 × SC/FD)、
+    英+简中双语;`Installer/RoundedTB.iss`;`build.bat --installer`(需配 `--release --version`)
+    编译 6 安装器;CI 增加独立 `installers` job;winget manifest 草稿(1.12.0 三文件,
+    identifier `linlinger`);暂不签名(留签名钩子);卸载默认保留 `rtb.json`/`rtb.log`。
+    **本批次未发版**:winget manifest 的 SHA256 仍为占位符(待 Release 上传后回填),
+    安装器 UI(双语/卸载页/自启)尚未实测。
 
 ## 已知问题 / 待接手(低优先级)
 
