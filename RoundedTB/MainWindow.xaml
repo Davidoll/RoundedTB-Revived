@@ -144,16 +144,16 @@
 
             <Grid x:Name="tbDiagramGrid" Margin="10,0,0,0" Height="247" VerticalAlignment="Top" HorizontalAlignment="Left" Width="486">
                 <Rectangle Stroke="#30242424" Fill="#20808080" RadiusX="5" RadiusY="5"/>
-                <ui:Button x:Name="taskbarRectStandIn" Margin="126,0,126,5" VerticalAlignment="Bottom" Click="taskbarRectStandIn_Click" Appearance="Primary" Height="32"/>
-                <ui:Button x:Name="trayRectStandIn" Margin="415,0,5,5" Click="trayRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
-                <ui:Button x:Name="widgetsRectStandIn" Margin="5,0,415,5" Click="widgetsRectStandIn_Click" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
+                <ui:Button x:Name="taskbarRectStandIn" Margin="126,0,126,5" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Click="taskbarRectStandIn_Click" Appearance="Primary" Height="32"/>
+                <ui:Button x:Name="trayRectStandIn" Margin="415,0,5,5" Click="trayRectStandIn_Click" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
+                <ui:Button x:Name="widgetsRectStandIn" Margin="5,0,415,5" Click="widgetsRectStandIn_Click" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="32" Appearance="Secondary"/>
 
-                <Label Content="RoundedTB Revived" HorizontalAlignment="Center" Margin="0,59,0,108" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" FontSize="60" Opacity="0.75"/>
+                <Label Content="RoundedTB Revived" HorizontalAlignment="Center" Margin="0,52,0,100" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" FontSize="60" Opacity="0.75"/>
                 <Label Content="{l:Loc Main_ToBegin}" HorizontalAlignment="Center" Margin="0,138,0,75" FontFamily="Segoe UI Variable Display" FontWeight="SemiBold" FontSize="20" Opacity="0.75"/>
             </Grid>
 
             <Grid Margin="0,0,10,83" HorizontalAlignment="Right" Width="133" Height="50" VerticalAlignment="Bottom">
-                <Label Content="{l:Loc Main_AutoHide}" Height="20" VerticalAlignment="Top"/>
+                <Label Content="{l:Loc Main_AutoHide}" VerticalAlignment="Top"/>
                 <ComboBox x:Name="autoHideComboBox" Margin="0,18,0,0" VerticalAlignment="Top">
                     <ComboBoxItem Content="{l:Loc Main_AutoHideAlwaysShow}"/>
                     <ComboBoxItem Content="{l:Loc Main_AutoHideAlwaysHide}"/>

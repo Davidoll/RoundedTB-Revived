@@ -13,6 +13,31 @@
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- ============================================================
+                 覆盖 WPF-UI 4.x 的 Label 隐式样式(必须放在 MergedDictionaries 之后:
+                 同一字典里直接条目的查找优先于合并字典,故能覆盖库的隐式样式)。
+
+                 原因:4.x 给 Label 新增了 Padding="0,0,0,4"(1.x 没有)。本项目界面是
+                 多年积累的"固定 Height/Margin 精确排版",这 4px 会把文字挤出可用高度。
+                 典型表现:设置页那张任务栏示意图里 FontSize=60 的 "RoundedTB Revived"
+                 (可用高度仅 ~80px)被裁,显示不全。
+
+                 这里重新声明库样式原有的全部属性、只把 Padding 归零——Label 用的是
+                 WPF 默认模板(库未提供 Template),所以完整重声明是安全的,不会丢外观。
+                 ============================================================ -->
+            <Style TargetType="{x:Type Label}">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Foreground" Value="{DynamicResource LabelForeground}" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+            </Style>
+
+            <!-- 注意:**不要**给 ui:Button 定义隐式样式。库的 DefaultUiButtonStyle 带
+                 OverridesDefaultStyle + 自己的 Template,在 App 级重声明会整体替换掉
+                 Fluent 外观(背景/圆角/悬停态全丢)。个别按钮需要改对齐时,就地在该按钮上
+                 显式设置属性即可(见 MainWindow 的三个示意按钮:4.x 默认
+                 HorizontalAlignment=Left,无内容按钮会塌缩,已就地改为 Stretch)。 -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

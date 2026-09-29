@@ -30,9 +30,13 @@ namespace RoundedTB
         public bool isWindows11;
         public List<Types.Taskbar> taskbarDetails = new List<Types.Taskbar>();
         public bool shouldReallyDieNoReally = false;
-        /// <summary>外部关闭请求(WM_CLOSE / WM_QUERYENDSESSION / WM_ENDSESSION)已到达。
-        /// WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,点叉与 Alt+F4 都会走到 OnClosing,
-        /// 需靠本标志区分:点叉=隐藏到托盘,外部关闭=真正退出并恢复任务栏。</summary>
+        /// <summary>标题栏关闭按钮被点击(WPF-UI 4.x 的 TitleBar.CloseClicked)。
+        /// 该事件在 CloseWindow() 之前触发,用它精确区分"点叉"(→隐藏到托盘)与真正的
+        /// 窗口关闭(Alt+F4 / 任务管理器 / 注销关机 → 退出)。不能用 WM_CLOSE 区分:
+        /// WPF 的 Window.Close() 自身也会发 WM_CLOSE,会把点叉误判成外部关闭。</summary>
+        private bool closeButtonClicked = false;
+
+        /// <summary>外部关闭请求(WM_QUERYENDSESSION / WM_ENDSESSION / WM_SYSCOMMAND-SC_CLOSE)。</summary>
         private bool externalCloseReceived = false;
         public string configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb.json");
         public string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rtb.log");
@@ -95,6 +99,13 @@ namespace RoundedTB
             // 因此用代码设置 BitmapImage)
             mainTitleBar.Icon = new Wpf.Ui.Controls.ImageIcon { Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(ChannelInfo.IconUri)) };
 
+            // 点叉 = 只隐藏窗口到托盘(对齐 R3.1 行为)。WPF-UI 4.x 移除了 TitleBar.
+            // CloseActionOverride,且 CloseClicked 之后 CloseWindow() 仍会无条件执行
+            // (无法用 e.Handled 取消),所以这里只做标记,真正拦截在 OnClosing。
+            // 注意:CloseClicked 的委托是 Wpf.Ui.Controls.TypedEventHandler<TitleBar, RoutedEventArgs>,
+            // 不能用标准 RoutedEventHandler,否则事件签名不匹配。
+            mainTitleBar.CloseClicked += (sender, args) => { closeButtonClicked = true; };
+
             // 右上角关闭按钮 = 只隐藏设置窗口,程序继续在托盘运行(对齐 R3.1 行为)。
             // WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,关闭按钮直接触发 Window.Close(),
             // 因此在 OnClosing 里拦截:未置 shouldReallyDieNoReally/externalCloseReceived 时取消并隐藏。
@@ -136,18 +147,17 @@ namespace RoundedTB
             IntPtr trayHandle = new WindowInteropHelper(this).EnsureHandle();
             source = HwndSource.FromHwnd(trayHandle);
             source.AddHook(interaction.HwndHook);
-            // 区分"点叉"(隐藏到托盘)与外部关闭(Alt+F4 / 任务管理器 / 注销关机 → 真正退出):
-            // WPF-UI 4.x 无 TitleBar.CloseActionOverride,标题栏按钮走 Window.Close()(不产生
-            // WM_CLOSE);Alt+F4 发 WM_SYSCOMMAND/SC_CLOSE → WPF 内部会转成 Close(),因此单独
-            // 记录;任务管理器结束任务、注销/关机则发 WM_CLOSE/WM_QUERYENDSESSION。
-            const int WM_CLOSE_MSG = 0x0010;
+            // 外部关闭(注销/关机/Alt+F4)标记。注意**不**把 WM_CLOSE 算作外部关闭:
+            // WPF 的 Window.Close()(点叉走的就是它)自身也会产生 WM_CLOSE,若据此判断会把
+            // 点叉误判成外部关闭→程序直接退出(这就是点叉不退到托盘的 bug 原因)。
+            // 点叉由 mainTitleBar.CloseClicked 标记(见上面订阅处)。
             const int WM_QUERYENDSESSION = 0x0011;
             const int WM_ENDSESSION = 0x0022;
             const int WM_SYSCOMMAND = 0x0112;
             const int SC_CLOSE = 0xF060;
             source.AddHook((IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled) =>
             {
-                if (msg == WM_CLOSE_MSG || msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION)
+                if (msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION)
                 {
                     externalCloseReceived = true;
                 }
@@ -797,9 +807,9 @@ namespace RoundedTB
             base.OnClosing(e);
 
             // 点叉 = 只隐藏窗口,程序继续在托盘运行(对齐 R3.1 行为)。
-            // WPF-UI 4.x 移除了 TitleBar.CloseActionOverride,标题栏关闭按钮直接触发
-            // Window.Close()(不产生 WM_CLOSE),与 Alt+F4/任务管理器/注销关机都走这里,
-            // 靠 externalCloseReceived 区分:点叉 → 隐藏;外部关闭 → 真正退出。
+            // 判据:非托盘 Exit(shouldReallyDieNoReally)、非外部关闭(externalCloseReceived)
+            // 时一律隐藏。点叉本身也会走到这里(CloseClicked 只是标记,拦不住 Close),
+            // 因此这里取消关闭并隐藏;Alt+F4/注销/任务管理器已由上面的钩子标记为外部关闭。
             if (!shouldReallyDieNoReally && !externalCloseReceived)
             {
                 e.Cancel = true;
