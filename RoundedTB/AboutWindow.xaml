@@ -8,59 +8,102 @@
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
         Background="#20808080"
-        Title="{l:Loc About_Title}" Height="616" Width="500"
-        Visibility ="Visible" ResizeMode="NoResize" Opacity="1.001"
+        Title="{l:Loc About_Title}"
+        MinWidth="500" MinHeight="616"
+        SizeToContent="WidthAndHeight"
+        Visibility="Visible" ResizeMode="NoResize" Opacity="1.001"
         WindowBackdropType="Mica" WindowCornerPreference="Round" ExtendsContentIntoTitleBar="True">
+
+    <!-- 布局说明:与 MainWindow.xaml 一致的原则——用 Grid 行/列 + StackPanel 排列,
+         不再用绝对 Margin 定位、不再给文字写死 Height(那样换 DPI/语言就会裁字)。
+         正文区放在 ScrollViewer 里,内容再多也只是滚动,不会被窗口裁掉。 -->
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <Image x:Name="bannerMst" Visibility ="Hidden" HorizontalAlignment="Center" Height="128" VerticalAlignment="Top"  Opacity="0.8" Source="res\HeadBanner.png" Width="500" Stretch="UniformToFill" Margin="0,-16,0,0"/>
-        <Image x:Name="bannerDev" Visibility ="Hidden" HorizontalAlignment="Center" Height="128" VerticalAlignment="Top"  Opacity="0.8" Source="res\HeadBannerDev.png" Width="500" Stretch="UniformToFill" Margin="0,-16,0,0"/>
-        <Image x:Name="bannerCan" Visibility ="Hidden" HorizontalAlignment="Center" Height="146" VerticalAlignment="Top"  Opacity="0.8" Source="res\HeadBannerCan.png" Width="500" Stretch="UniformToFill" Margin="0,-16,0,0"/>
-        <Button x:Name="okButton" Content="{l:Loc About_Ok}" Margin="0,0,10,10" VerticalAlignment="Bottom" HorizontalAlignment="Right" Width="85" Click="okButton_Click" FontWeight="Normal"/>
-        <TextBlock x:Name="titleBlock" HorizontalAlignment="Left" Margin="10,35,0,0" TextWrapping="Wrap" Text="{l:Loc About_Welcome}" VerticalAlignment="Top" FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="28" Opacity="0.795"/>
-        <TextBlock x:Name="subtitleBlock" HorizontalAlignment="Left" Margin="10,85,0,0" TextWrapping="Wrap" Text="{x:Static local:ChannelInfo.Subtitle}" VerticalAlignment="Top" FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="22" Opacity="0.795"/>
+        <ui:TitleBar x:Name="aboutTitleBar" Grid.Row="0" Title="{l:Loc About_Title}"
+                     Icon="pack://application:,,,/RoundedTB.ico" ShowMaximize="False"/>
 
-        <ui:TitleBar x:Name="aboutTitleBar" Grid.Row="0" Title="{l:Loc About_Title}" Icon="pack://application:,,,/RoundedTB.ico" Height="51" ShowMaximize="False"/>
+        <!-- 横幅:等比填充,宽度跟随窗口(原来写死 Width=500 + 负 Margin)。 -->
+        <Grid Grid.Row="1" Height="128" ClipToBounds="True">
+            <Image x:Name="bannerMst" Visibility="Hidden" Opacity="0.8"
+                   Source="res\HeadBanner.png" Stretch="UniformToFill"
+                   HorizontalAlignment="Center" VerticalAlignment="Top"/>
+            <Image x:Name="bannerDev" Visibility="Hidden" Opacity="0.8"
+                   Source="res\HeadBannerDev.png" Stretch="UniformToFill"
+                   HorizontalAlignment="Center" VerticalAlignment="Top"/>
+            <Image x:Name="bannerCan" Visibility="Hidden" Opacity="0.8"
+                   Source="res\HeadBannerCan.png" Stretch="UniformToFill"
+                   HorizontalAlignment="Center" VerticalAlignment="Top"/>
+        </Grid>
 
+        <!-- 标题 + 副标题 + 说明:纵向 StackPanel,间距由 Margin 统一控制,
+             不再各自写绝对 Margin(原来 35/85/134 是对着固定布局调出来的)。 -->
+        <StackPanel Grid.Row="2" Margin="14,8,14,8">
+            <TextBlock x:Name="titleBlock" TextWrapping="Wrap" Text="{l:Loc About_Welcome}"
+                       FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="28" Opacity="0.795"/>
+            <TextBlock x:Name="subtitleBlock" TextWrapping="Wrap" Text="{x:Static local:ChannelInfo.Subtitle}"
+                       FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="22" Opacity="0.795"
+                       Margin="0,4,0,0"/>
 
-        <TextBlock x:Name="bodyBlockMain" Margin="10,134,10,0" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI SemiBold" FontSize="14" VerticalAlignment="Top" Text="{l:Loc About_Thanks}"/>
+            <TextBlock x:Name="bodyBlockMain" TextWrapping="Wrap" FontWeight="Normal"
+                       FontFamily="Segoe UI SemiBold" FontSize="14" Text="{l:Loc About_Thanks}"
+                       Margin="0,14,0,10"/>
 
-        <ScrollViewer Margin="0,176,0,0" VerticalScrollBarVisibility="Hidden" Height="378" VerticalAlignment="Top">
-            <StackPanel Width="473">
-                <Expander x:Name="expander0" HorizontalAlignment="Center" Header="{l:Loc About_WhatsNew}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <Grid>
-                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock0" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8" LineHeight="23" Text="{l:Loc About_WhatsNewBody}"/>
-                    </Grid>
-                </Expander>
-                <Expander x:Name="expander1" HorizontalAlignment="Center" Header="{l:Loc About_BasicOptions}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <Grid>
-                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock1" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8" LineHeight="23" Text="{l:Loc About_BasicOptionsBody}"/>
-                    </Grid>
-                </Expander>
-                <Expander x:Name="expander2" HorizontalAlignment="Center" Header="{l:Loc About_AdvancedOptions}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <Grid>
-                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock2" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8" LineHeight="23" Text="{l:Loc About_AdvancedOptionsBody}"/>
-                    </Grid>
-                </Expander>
-                <Expander x:Name="expander3" HorizontalAlignment="Center" Header="{l:Loc About_KnownIssues}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <Grid>
-                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock3" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8" LineHeight="23" Text="{l:Loc About_KnownIssuesBody}"/>
-                    </Grid>
-                </Expander>
-                <Expander x:Name="expander4" HorizontalAlignment="Center" Header="{l:Loc About_HelpInfo}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <Grid>
-                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock4" TextWrapping="Wrap" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8" LineHeight="21" Text="{l:Loc About_HelpInfoBody}"/>
-                    </Grid>
-                </Expander>
-                <Expander x:Name="expander5" HorizontalAlignment="Center" Header="{l:Loc About_Debug}" VerticalAlignment="Top" Width="480" FontSize="16" FontFamily="Segoe UI Semibold">
-                    <StackPanel>
-                        <Button x:Name="configButton" Content="{l:Loc About_OpenConfig}" Margin="0,10,0,0" Click="configButton_Click"/>
-                        <Button x:Name="logButton" Content="{l:Loc About_OpenLog}" Margin="0,10,0,0" Click="logButton_Click"/>
-                    </StackPanel>
-                </Expander>
-            </StackPanel>
-        </ScrollViewer>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          MaxHeight="380">
+                <StackPanel>
+                    <Expander x:Name="expander0" Header="{l:Loc About_WhatsNew}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock0" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8"
+                                   LineHeight="23" Text="{l:Loc About_WhatsNewBody}"/>
+                    </Expander>
+                    <Expander x:Name="expander1" Header="{l:Loc About_BasicOptions}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock1" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8"
+                                   LineHeight="23" Text="{l:Loc About_BasicOptionsBody}"/>
+                    </Expander>
+                    <Expander x:Name="expander2" Header="{l:Loc About_AdvancedOptions}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock2" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8"
+                                   LineHeight="23" Text="{l:Loc About_AdvancedOptionsBody}"/>
+                    </Expander>
+                    <Expander x:Name="expander3" Header="{l:Loc About_KnownIssues}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock3" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8"
+                                   LineHeight="23" Text="{l:Loc About_KnownIssuesBody}"/>
+                    </Expander>
+                    <Expander x:Name="expander4" Header="{l:Loc About_HelpInfo}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <TextBlock Margin="0,5,0,0" x:Name="bodyBlock4" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontFamily="Segoe UI" FontSize="14" Opacity="0.8"
+                                   LineHeight="21" Text="{l:Loc About_HelpInfoBody}"/>
+                    </Expander>
+                    <Expander x:Name="expander5" Header="{l:Loc About_Debug}" FontSize="16"
+                              FontFamily="Segoe UI Semibold" HorizontalAlignment="Stretch">
+                        <StackPanel>
+                            <Button x:Name="configButton" Content="{l:Loc About_OpenConfig}" Margin="0,10,0,0"
+                                    HorizontalAlignment="Left" Click="configButton_Click"/>
+                            <Button x:Name="logButton" Content="{l:Loc About_OpenLog}" Margin="0,10,0,0"
+                                    HorizontalAlignment="Left" Click="logButton_Click"/>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+        </StackPanel>
 
-
+        <!-- 按钮行:按内容宽度自适应,不再写死 Width=85。 -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="14,0,14,14">
+            <Button x:Name="okButton" Content="{l:Loc About_Ok}" MinWidth="85"
+                    Click="okButton_Click" FontWeight="Normal"/>
+        </StackPanel>
     </Grid>
 </ui:FluentWindow>

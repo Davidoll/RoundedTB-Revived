@@ -17,7 +17,7 @@ namespace RoundedTB
     /// <summary>
     /// Interaction logic for Infobox.xaml
     /// </summary>
-    public partial class Infobox : Window
+    public partial class Infobox : Wpf.Ui.Controls.FluentWindow
     {
         public Infobox()
         {

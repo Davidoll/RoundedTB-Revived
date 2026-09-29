@@ -443,24 +443,36 @@ namespace RoundedTB
                 widgetsRectStandIn.Opacity = 1;
             }
 
+            // 示意图里的三个段:原先靠给按钮设绝对 Margin 摆位,现在改为 Grid 列定位
+            // (示意图内部是 3 列等宽网格:col0=widgets / col1=taskbar / col2=tray),
+            // 通过「可见性 + 跨列」表达三种布局,不再依赖任何像素坐标。
+            System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 1);
+            System.Windows.Controls.Grid.SetColumn(trayRectStandIn, 2);
+            System.Windows.Controls.Grid.SetColumn(widgetsRectStandIn, 0);
+
             if (activeSettings.IsCentred && activeSettings.IsWindows11 && activeSettings.IsDynamic)
             {
-                taskbarRectStandIn.Margin = new Thickness(126, 0, 126, 5);
+                // 居中 + 动态:三段分立(左 widgets / 中 app list / 右 tray)。
+                System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 1);
+                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 1);
                 trayRectStandIn.Visibility = Visibility.Visible;
                 widgetsRectStandIn.Visibility = Visibility.Visible;
             }
             else if (activeSettings.IsDynamic)
             {
-                taskbarRectStandIn.Margin = new Thickness(5, 0, 247, 5);
+                // 动态(左对齐):app list 段吃掉左侧两列,右侧留 tray。
+                System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 0);
+                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 2);
                 trayRectStandIn.Visibility = Visibility.Visible;
                 widgetsRectStandIn.Visibility = Visibility.Hidden;
             }
             else
             {
-                taskbarRectStandIn.Margin = new Thickness(5, 210, 5, 5);
+                // 简单模式:单段占满整条。
+                System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 0);
+                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 3);
                 trayRectStandIn.Visibility = Visibility.Hidden;
                 widgetsRectStandIn.Visibility = Visibility.Hidden;
-
             }
         }
 
@@ -808,10 +820,15 @@ namespace RoundedTB
 
             // 点叉 = 只隐藏窗口,程序继续在托盘运行(对齐 R3.1 行为)。
             // 判据:非托盘 Exit(shouldReallyDieNoReally)、非外部关闭(externalCloseReceived)
-            // 时一律隐藏。点叉本身也会走到这里(CloseClicked 只是标记,拦不住 Close),
-            // 因此这里取消关闭并隐藏;Alt+F4/注销/任务管理器已由上面的钩子标记为外部关闭。
+            // 时一律隐藏。点叉本身也会走到这里(WPF-UI 4.x 的 CloseClicked 只是标记,
+            // 它之后 CloseWindow() 仍会无条件调 Close(),拦不住),所以这里取消关闭并隐藏;
+            // Alt+F4/注销/任务管理器已由上面的钩子标记为外部关闭。
             if (!shouldReallyDieNoReally && !externalCloseReceived)
             {
+                if (closeButtonClicked && ChannelInfo.VerboseLogging)
+                {
+                    interaction.AddLog("[close] titlebar close button -> hide to tray");
+                }
                 e.Cancel = true;
                 Visibility = Visibility.Hidden;
                 return;
@@ -1188,7 +1205,8 @@ namespace RoundedTB
             if (Opacity > 0.01)
             {
                 Infobox ib = new Infobox();
-                ib.Height = 450;
+                // 不再硬编码高度:Infobox 已改为 SizeToContent + 内部 ScrollViewer,
+                // 内容多时窗口自适应/内部滚动,写死高度会把长文案裁掉。
                 ib.Title = Localization.Get("Help_CompatTitle");
                 ib.titleBlock.Text = Localization.Get("Help_CompatHeader");
                 ib.bodyBlock.Text = Localization.Get("Help_CompatBody");

@@ -1,18 +1,39 @@
-﻿<Window x:Class="RoundedTB.Infobox"
+﻿<ui:FluentWindow x:Class="RoundedTB.Infobox"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RoundedTB"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
-        Title="{l:Loc Info_Title}" Height="430" Width="500"
-        xmlns:ui="http://schemas.modernwpf.com/2019"
-        Visibility ="Visible" ResizeMode="NoResize" Opacity="1.001">
-    <Grid>
-        <Button x:Name="okButton" Content="{l:Loc Info_Ok}" Margin="0,0,10,10" VerticalAlignment="Bottom" HorizontalAlignment="Right" Width="85" Click="okButton_Click"/>
-        <TextBlock x:Name="titleBlock" HorizontalAlignment="Left" Margin="10,10,0,0" TextWrapping="Wrap" Text="{l:Loc Info_Title}" VerticalAlignment="Top" FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="14"/>
-        <TextBlock x:Name="bodyBlock" Margin="10,34,10,47" TextWrapping="Wrap" Text="{l:Loc Info_Body}" FontWeight="Normal" FontFamily="Segoe UI" FontSize="14"/>
+        Title="{l:Loc Info_Title}"
+        MinWidth="500" MinHeight="430"
+        SizeToContent="WidthAndHeight"
+        Visibility="Visible" ResizeMode="NoResize" Opacity="1.001"
+        WindowBackdropType="Mica" WindowCornerPreference="Round" ExtendsContentIntoTitleBar="True">
 
+    <!-- 与 MainWindow/AboutWindow 同一套弹性布局原则:Grid 行 + 自适应尺寸,
+         不再用绝对 Margin 定位、不写死文字高度(换 DPI/语言不会裁字)。
+         顺带修掉了原文件遗留的 modernwpf xmlns(该库早已不再使用)。 -->
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="titleBlock" Grid.Row="0" TextWrapping="Wrap" Text="{l:Loc Info_Title}"
+                   FontWeight="Normal" FontFamily="Segoe UI Semibold" FontSize="14"/>
+
+        <ScrollViewer Grid.Row="1" Margin="0,10,0,10" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <TextBlock x:Name="bodyBlock" TextWrapping="Wrap" Text="{l:Loc Info_Body}"
+                       FontWeight="Normal" FontFamily="Segoe UI" FontSize="14"/>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="okButton" Content="{l:Loc Info_Ok}" MinWidth="85" Click="okButton_Click"/>
+        </StackPanel>
     </Grid>
-</Window>
+</ui:FluentWindow>
