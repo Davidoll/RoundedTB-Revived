@@ -155,66 +155,96 @@
                         <Rectangle Stroke="#30242424" Fill="#20808080" RadiusX="5" RadiusY="5"
                                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
 
-                        <!-- 任务栏段示意:3 列,由代码按设置切换列位/可见性
-                             (原来的做法是给按钮设绝对 Margin,现改为 Grid 列定位)。 -->
+                        <!-- 任务栏段示意:用 5 列还原原版的真实比例与段间距 ——
+                             列 = widgets(1*) | 间隙(0.8*) | applist(3.5*) | 间隙(0.8*) | tray(1*)
+                             即原版 486px 容器里的 66 : 234 : 66 三段 + 各 55px 间隙。
+                             段间距用**独立列**而非 Margin:这样它随窗口等比缩放,
+                             换 DPI/缩放时不会出现"三段挤在一起"或间距失真。
+                             代码负责切换可见性与跨列(见 UpdateUi):
+                               居中动态   = widgets | applist | tray
+                               左对齐动态 = [applist 跨前 3 列] | tray
+                               简单模式   = [单段跨全部 5 列] -->
                         <Grid VerticalAlignment="Bottom" Margin="4,0,4,10" Height="32">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="0.8*"/>
+                                <ColumnDefinition Width="3.5*"/>
+                                <ColumnDefinition Width="0.8*"/>
+                                <ColumnDefinition Width="1*"/>
                             </Grid.ColumnDefinitions>
-                            <ui:Button x:Name="widgetsRectStandIn" Grid.Column="0" Margin="1,0"
+                            <ui:Button x:Name="widgetsRectStandIn" Grid.Column="0"
                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                        Click="widgetsRectStandIn_Click" Appearance="Secondary"/>
-                            <ui:Button x:Name="taskbarRectStandIn" Grid.Column="1" Margin="1,0"
+                            <ui:Button x:Name="taskbarRectStandIn" Grid.Column="2"
                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                        Click="taskbarRectStandIn_Click" Appearance="Primary"/>
-                            <ui:Button x:Name="trayRectStandIn" Grid.Column="2" Margin="1,0"
+                            <ui:Button x:Name="trayRectStandIn" Grid.Column="4"
                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                        Click="trayRectStandIn_Click" Appearance="Secondary"/>
                         </Grid>
 
-                        <!-- 大字标题:再套一层 Viewbox,超出可用宽度时等比缩小而非被裁。
-                             (此前它按 FontSize=60 排版约 510px 宽,却被放在 486px 的
-                              容器里,所以"RoundedTB Revived"总是缺一块。) -->
-                        <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxWidth="466"
-                                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="10,52,10,0">
-                            <Label Content="RoundedTB Revived" FontFamily="Segoe UI Variable Display"
-                                   FontWeight="SemiBold" FontSize="60" Opacity="0.75"/>
-                        </Viewbox>
-
-                        <Label Content="{l:Loc Main_ToBegin}" HorizontalAlignment="Center"
-                               VerticalAlignment="Bottom" Margin="10,0,10,58"
-                               FontFamily="Segoe UI Variable Display" FontWeight="SemiBold"
-                               FontSize="20" Opacity="0.75"/>
+                        <!-- 示意图内文字区:用 Grid 行把"标题"与"提示语"分开,
+                             各自在自己的行内垂直居中,不再互相挤压。
+                             标题套 Viewbox(仅缩小):宽度不够时等比缩小而不裁切;
+                             提示语允许换行:长翻译/高 DPI 下自动折行,不会横向裁掉。 -->
+                        <Grid VerticalAlignment="Center" Margin="10,8,10,50">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Viewbox Grid.Row="0" Stretch="Uniform" StretchDirection="DownOnly"
+                                     MaxWidth="462" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Label Content="RoundedTB Revived" FontFamily="Segoe UI Variable Display"
+                                       FontWeight="SemiBold" FontSize="60" Opacity="0.75"/>
+                            </Viewbox>
+                            <TextBlock Grid.Row="1" Text="{l:Loc Main_ToBegin}" TextWrapping="Wrap"
+                                       TextAlignment="Center" HorizontalAlignment="Center"
+                                       Margin="0,8,0,0"
+                                       FontFamily="Segoe UI Variable Display" FontWeight="SemiBold"
+                                       FontSize="20" Opacity="0.75"/>
+                        </Grid>
                     </Grid>
                 </Viewbox>
 
-                <!-- 选项勾选框:纵向排列,不再用绝对 Margin 错位摆放。 -->
+                <!-- 选项勾选框:纵向排列。
+                     注意:CheckBox 的 Content 直接用字符串不会换行,WPF-UI 4.x 的
+                     模板又带 MinHeight/Padding,长文案(如"按下 alt+tab 或 win+tab 时,
+                     恢复任务栏")在空间不足时会被裁掉。所以这里统一用 TextBlock 作为
+                     Content 并允许换行 + 限制最大宽度,空间不够时折行而不是裁切。 -->
                 <StackPanel Grid.Row="1" HorizontalAlignment="Left">
-                    <CheckBox x:Name="showSegmentsOnHoverCheckBox" Content="{l:Loc Main_ShowSegmentsOnHover}"
-                              Margin="0,0,0,6"
-                              Checked="showSegmentsOnHoverCheckBox_Checked" Unchecked="showSegmentsOnHoverCheckBox_Unchecked"/>
-                    <CheckBox x:Name="fillMaximisedCheckBox" Content="{l:Loc Main_FillOnMaximise}"
-                              Margin="0,0,0,6"
-                              Checked="fillMaximisedCheckBox_Checked" Unchecked="fillMaximisedCheckBox_Unchecked"/>
-                    <CheckBox x:Name="fillAltTabCheckBox" Content="{l:Loc Main_FillOnTaskSwitch}"
-                              Margin="0,0,0,6"/>
-                    <CheckBox x:Name="compositionFixCheckBox" Content="{l:Loc Main_CompositionCompat}"
-                              IsChecked="False" Checked="compositionFixCheckBox_Checked"/>
-                    <CheckBox x:Name="centredCheckBox" Content="{l:Loc Main_CentredTaskbar}"
-                              Visibility="Hidden"/>
+                    <CheckBox x:Name="showSegmentsOnHoverCheckBox" Margin="0,0,0,6"
+                              Checked="showSegmentsOnHoverCheckBox_Checked" Unchecked="showSegmentsOnHoverCheckBox_Unchecked">
+                        <TextBlock Text="{l:Loc Main_ShowSegmentsOnHover}" TextWrapping="Wrap" MaxWidth="560"/>
+                    </CheckBox>
+                    <CheckBox x:Name="fillMaximisedCheckBox" Margin="0,0,0,6"
+                              Checked="fillMaximisedCheckBox_Checked" Unchecked="fillMaximisedCheckBox_Unchecked">
+                        <TextBlock Text="{l:Loc Main_FillOnMaximise}" TextWrapping="Wrap" MaxWidth="560"/>
+                    </CheckBox>
+                    <CheckBox x:Name="fillAltTabCheckBox" Margin="0,0,0,6">
+                        <TextBlock Text="{l:Loc Main_FillOnTaskSwitch}" TextWrapping="Wrap" MaxWidth="560"/>
+                    </CheckBox>
+                    <CheckBox x:Name="compositionFixCheckBox" IsChecked="False"
+                              Checked="compositionFixCheckBox_Checked">
+                        <TextBlock Text="{l:Loc Main_CompositionCompat}" TextWrapping="Wrap" MaxWidth="560"/>
+                    </CheckBox>
+                    <CheckBox x:Name="centredCheckBox" Visibility="Hidden">
+                        <TextBlock Text="{l:Loc Main_CentredTaskbar}" TextWrapping="Wrap" MaxWidth="560"/>
+                    </CheckBox>
                 </StackPanel>
             </Grid>
 
             <!-- ============ 右列:数值设置(圆角/边距/自动隐藏) ============ -->
-            <StackPanel Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top">
+            <!-- 右列用固定宽度(MaxWidth 限制)而不是 Auto + 内容决定:
+                 输入框/滑块需要稳定的对齐基线,列宽随内容变化会左右抖动。
+                 列内所有文字一律用 TextBlock(Label 的模板 padding 会挤压文字)。 -->
+            <StackPanel Grid.Row="0" Grid.Column="1" Width="248" VerticalAlignment="Top">
 
                 <!-- 圆角:滑块吃掉剩余宽度,输入框按内容自适应。
                      最上面叠了一个透明热区(分屏模式帮助),保持原有交互位置。 -->
                 <Grid Margin="0,0,0,10">
                     <StackPanel>
-                        <Label x:Name="cornerRadiusLabel" Content="{l:Loc Main_CornerRadius}"/>
+                        <TextBlock x:Name="cornerRadiusLabel" Text="{l:Loc Main_CornerRadius}"
+                                   TextWrapping="Wrap" Margin="0,0,0,4"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -226,11 +256,11 @@
                                     Thumb.DragCompleted="cornerRadiusSlider_DragCompleted"
                                     ValueChanged="cornerRadiusSlider_ValueChanged"/>
                             <TextBox x:Name="cornerRadiusInput" Grid.Column="1" Margin="10,0,0,0" TextWrapping="NoWrap"
-                                     Text="" MinWidth="56" LostFocus="cornerRadiusInput_LostFocus"/>
+                                     Text="" Width="64" LostFocus="cornerRadiusInput_LostFocus"/>
                         </Grid>
                     </StackPanel>
                     <Button x:Name="splitHelpButton" Opacity="0.001" Content="{l:Loc Main_SplitHelpButton}"
-                            HorizontalAlignment="Left" VerticalAlignment="Top" MinWidth="120" MinHeight="30"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Width="140" MinHeight="30"
                             Click="splitHelpButton_Click" FontWeight="Normal" FontFamily="Segoe UI Semibold"
                             Visibility="Hidden"/>
                 </Grid>
@@ -247,26 +277,27 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <Label x:Name="mTopLabel" Grid.Row="0" Grid.Column="0" Content="{l:Loc Main_TopMargin}"/>
-                    <Label x:Name="mBottomLabel" Grid.Row="0" Grid.Column="1" Margin="10,0,0,0"
-                           Content="{l:Loc Main_BottomMargin}"/>
+                    <TextBlock x:Name="mTopLabel" Grid.Row="0" Grid.Column="0" Text="{l:Loc Main_TopMargin}"
+                               TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="mBottomLabel" Grid.Row="0" Grid.Column="1" Margin="10,0,0,4"
+                               Text="{l:Loc Main_BottomMargin}" TextWrapping="Wrap"/>
                     <TextBox x:Name="mTopInput" Grid.Row="1" Grid.Column="0" Margin="0,0,0,6" TextWrapping="NoWrap"
-                             Text="" MinWidth="80" LostFocus="mTopInput_LostFocus"/>
+                             Text="" LostFocus="mTopInput_LostFocus"/>
                     <TextBox x:Name="mBottomInput" Grid.Row="1" Grid.Column="1" Margin="10,0,0,6" TextWrapping="NoWrap"
-                             Text="" MinWidth="80" LostFocus="mBottomInput_LostFocus"/>
-                    <Label x:Name="mLeftLabel" Grid.Row="2" Grid.Column="0" Content="{l:Loc Main_LeftMargin}"/>
-                    <Label x:Name="mRightLabel" Grid.Row="2" Grid.Column="1" Margin="10,0,0,0"
-                           Content="{l:Loc Main_RightMargin}"/>
+                             Text="" LostFocus="mBottomInput_LostFocus"/>
+                    <TextBlock x:Name="mLeftLabel" Grid.Row="2" Grid.Column="0" Text="{l:Loc Main_LeftMargin}"
+                               TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="mRightLabel" Grid.Row="2" Grid.Column="1" Margin="10,0,0,4"
+                               Text="{l:Loc Main_RightMargin}" TextWrapping="Wrap"/>
                     <TextBox x:Name="mLeftInput" Grid.Row="3" Grid.Column="0" TextWrapping="NoWrap"
-                             Text="" MinWidth="80" LostFocus="mLeftInput_LostFocus"/>
+                             Text="" LostFocus="mLeftInput_LostFocus"/>
                     <TextBox x:Name="mRightInput" Grid.Row="3" Grid.Column="1" Margin="10,0,0,0" TextWrapping="NoWrap"
-                             Text="" MinWidth="80" LostFocus="mRightInput_LostFocus"/>
+                             Text="" LostFocus="mRightInput_LostFocus"/>
                 </Grid>
 
-                <!-- 自动隐藏:标签 + 下拉框纵向排列(原来是给 Label 定高 20 + ComboBox 绝对偏移,
-                     标签被 WPF-UI 4.x 的 padding 挤到裁字)。 -->
+                <!-- 自动隐藏:标签 + 下拉框纵向排列。 -->
                 <StackPanel Margin="0,0,0,10">
-                    <Label Content="{l:Loc Main_AutoHide}"/>
+                    <TextBlock Text="{l:Loc Main_AutoHide}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                     <ComboBox x:Name="autoHideComboBox">
                         <ComboBoxItem Content="{l:Loc Main_AutoHideAlwaysShow}"/>
                         <ComboBoxItem Content="{l:Loc Main_AutoHideAlwaysHide}"/>
@@ -276,12 +307,16 @@
                 <!-- 模式选择:三个勾选框叠在同一格,代码按模式切换可见性,
                      因此不需要各自的绝对定位与固定宽度。 -->
                 <Grid>
-                    <CheckBox x:Name="dynamicCheckBox" Content="{l:Loc Main_DynamicMode}"
-                              Checked="dynamicCheckBox_Checked" Unchecked="dynamicCheckBox_Unchecked"/>
-                    <CheckBox x:Name="showTrayCheckBox" Content="{l:Loc Main_ShowTraySegment}"
-                              Visibility="Hidden"/>
-                    <CheckBox x:Name="showWidgetsCheckBox" Content="{l:Loc Main_ShowWidgetsSegment}"
-                              Visibility="Hidden"/>
+                    <CheckBox x:Name="dynamicCheckBox" Checked="dynamicCheckBox_Checked"
+                              Unchecked="dynamicCheckBox_Unchecked">
+                        <TextBlock Text="{l:Loc Main_DynamicMode}" TextWrapping="Wrap" MaxWidth="200"/>
+                    </CheckBox>
+                    <CheckBox x:Name="showTrayCheckBox" Visibility="Hidden">
+                        <TextBlock Text="{l:Loc Main_ShowTraySegment}" TextWrapping="Wrap" MaxWidth="200"/>
+                    </CheckBox>
+                    <CheckBox x:Name="showWidgetsCheckBox" Visibility="Hidden">
+                        <TextBlock Text="{l:Loc Main_ShowWidgetsSegment}" TextWrapping="Wrap" MaxWidth="200"/>
+                    </CheckBox>
                 </Grid>
             </StackPanel>
 

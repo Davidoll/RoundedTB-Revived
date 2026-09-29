@@ -443,34 +443,35 @@ namespace RoundedTB
                 widgetsRectStandIn.Opacity = 1;
             }
 
-            // 示意图里的三个段:原先靠给按钮设绝对 Margin 摆位,现在改为 Grid 列定位
-            // (示意图内部是 3 列等宽网格:col0=widgets / col1=taskbar / col2=tray),
+            // 示意图里的三个段:原先靠给按钮设绝对 Margin 摆位,现在改为 Grid 列定位。
+            // 列结构(见 MainWindow.xaml):0=widgets 1=间隙 2=applist 3=间隙 4=tray,
             // 通过「可见性 + 跨列」表达三种布局,不再依赖任何像素坐标。
-            System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 1);
-            System.Windows.Controls.Grid.SetColumn(trayRectStandIn, 2);
             System.Windows.Controls.Grid.SetColumn(widgetsRectStandIn, 0);
+            System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 2);
+            System.Windows.Controls.Grid.SetColumn(trayRectStandIn, 4);
 
             if (activeSettings.IsCentred && activeSettings.IsWindows11 && activeSettings.IsDynamic)
             {
                 // 居中 + 动态:三段分立(左 widgets / 中 app list / 右 tray)。
-                System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 1);
+                System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 2);
                 System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 1);
                 trayRectStandIn.Visibility = Visibility.Visible;
                 widgetsRectStandIn.Visibility = Visibility.Visible;
             }
             else if (activeSettings.IsDynamic)
             {
-                // 动态(左对齐):app list 段吃掉左侧两列,右侧留 tray。
+                // 动态(左对齐):app list 段从最左开始,吃掉前 3 列(widgets+间隙+applist),
+                // 右侧留 tray,与原版视觉一致。
                 System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 0);
-                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 2);
+                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 3);
                 trayRectStandIn.Visibility = Visibility.Visible;
                 widgetsRectStandIn.Visibility = Visibility.Hidden;
             }
             else
             {
-                // 简单模式:单段占满整条。
+                // 简单模式:单段占满整条(跨 5 列)。
                 System.Windows.Controls.Grid.SetColumn(taskbarRectStandIn, 0);
-                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 3);
+                System.Windows.Controls.Grid.SetColumnSpan(taskbarRectStandIn, 5);
                 trayRectStandIn.Visibility = Visibility.Hidden;
                 widgetsRectStandIn.Visibility = Visibility.Hidden;
             }
