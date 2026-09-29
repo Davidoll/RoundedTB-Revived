@@ -849,11 +849,31 @@ namespace RoundedTB
                 interaction.WriteJSON();
             }
 
-            // 清理托盘图标(Shell_NotifyIcon NIM_DELETE)
+            // 清理托盘图标(Hardcodet TaskbarIcon)
             try
             {
                 TrayIcon?.Dispose();
                 _trayIconImage?.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// 窗口真正关闭后退出进程。放在 OnClosed(而不是 OnClosing)是因为 OnClosing 可能
+        /// 被取消(点叉=隐藏),在那里 Shutdown 会把"隐藏"变成"退出"。
+        /// ShutdownMode 是 OnExplicitShutdown,只关窗口不会结束进程:托盘 Exit 菜单自己会调
+        /// Shutdown,但 Alt+F4 / 任务管理器 / 注销关机走的是外部关闭路径,不在这里兜底会留下
+        /// 一个无 region、无托盘图标的僵尸进程(任务栏已恢复但程序还在跑)。
+        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+
+            try
+            {
+                System.Windows.Application.Current?.Shutdown();
             }
             catch (Exception)
             {
