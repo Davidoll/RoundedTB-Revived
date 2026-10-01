@@ -9,8 +9,7 @@
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
         Title="RoundedTB Revived"
-        MinWidth="718" MinHeight="458"
-        SizeToContent="WidthAndHeight"
+        Width="718" Height="458"
         Background="#20808080"
         d:Background="DarkGray"
         Visibility="Hidden"
@@ -32,19 +31,24 @@
          实际宽约 510px,被水平裁掉)。
 
          现在改为弹性布局:
-           1. 窗口 SizeToContent="WidthAndHeight" + MinWidth/MinHeight —— 尺寸跟着
-              内容走,内容变长(翻译/大字号/高 DPI)时窗口自动变大而不是裁字。
-           2. 所有控件用 Grid 的行列 + StackPanel 排列,不再用绝对 Margin 定位;
-              控件宽度用 Auto/* 分配,不再写死 Width。
-           3. 任务栏示意图整体包在 Viewbox 里:内部保留一套"设计坐标"(486x247),
-              Viewbox 负责等比缩放。这样内部的数字是**比例**,不是绝对像素——
-              任何 DPI/窗口尺寸下都不会裁切。
-           4. 大字标题再套一层 Viewbox(StretchDirection=DownOnly):文字超出可用
-              宽度时自动等比缩小,永远完整显示。
+            1. 窗口固定 Width(保持原来的 718)+ SizeToContent="Height" —— 高度跟着
+               内容走,宽度保持稳定。**切勿**改成 SizeToContent="WidthAndHeight":
+               宽度自动时 WPF 视可用宽度为无限,TextWrapping 便不再换行,一行长文字
+               会把窗口撑得极宽(关于/帮助窗口就是这么被撑宽的)。
+            2. 所有控件用 Grid 的行列 + StackPanel 排列,不再用绝对 Margin 定位;
+               控件宽度用 Auto/* 分配,不再写死 Width。
+            3. 任务栏示意图整体包在 Viewbox 里:内部保留一套"设计坐标"(486x247),
+               Viewbox 负责等比缩放。这样内部的数字是**比例**,不是绝对像素——
+               任何 DPI/窗口尺寸下都不会裁切。
+            4. 大字标题再套一层 Viewbox(StretchDirection=DownOnly):文字超出可用
+               宽度时自动等比缩小,永远完整显示。
+            5. 文字类控件不要用 Label(其模板 padding 会挤压文字),用 TextBlock
+               并设 TextWrapping="Wrap";CheckBox 的 Content 也一律包 TextBlock,
+               否则长文案不换行会被裁。
 
-         改布局时请保持这个原则:新增控件用行列/StackPanel 排,不要写死
-         坐标与尺寸;需要在固定画布内排版的,放进 Viewbox。
-         ================================================================ -->
+          改布局时请保持这个原则:新增控件用行列/StackPanel 排,不要写死
+          坐标与尺寸;需要在固定画布内排版的,放进 Viewbox。
+          ================================================================ -->
 
     <Window.Resources>
         <!-- 托盘右键菜单主题刷子:右键打开时按系统亮暗模式更新(亮色/暗色)。 -->

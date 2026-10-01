@@ -8,13 +8,14 @@
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
         Title="{l:Loc Info_Title}"
-        MinWidth="500" MinHeight="430"
-        SizeToContent="WidthAndHeight"
+        Width="500" Height="430"
         Visibility="Visible" ResizeMode="NoResize" Opacity="1.001"
         WindowBackdropType="Mica" WindowCornerPreference="Round" ExtendsContentIntoTitleBar="True">
 
-    <!-- 与 MainWindow/AboutWindow 同一套弹性布局原则:Grid 行 + 自适应尺寸,
-         不再用绝对 Margin 定位、不写死文字高度(换 DPI/语言不会裁字)。
+    <!-- 与 MainWindow/AboutWindow 同一套布局原则:Grid 行 + StackPanel 排列,
+         不用绝对 Margin 定位、不写死文字高度(换 DPI/语言不会裁字)。
+         窗口尺寸固定 500x430(与原版一致),正文区用 * 行占满剩余高度并在内容
+         过多时内部滚动,不会裁切、也不会撑大窗口。
          顺带修掉了原文件遗留的 modernwpf xmlns(该库早已不再使用)。 -->
     <Grid Margin="14">
         <Grid.RowDefinitions>
