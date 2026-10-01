@@ -9,7 +9,8 @@
         xmlns:l="clr-namespace:RoundedTB"
         mc:Ignorable="d"
         Title="RoundedTB Revived"
-        Width="718" Height="458"
+        Width="718"
+        SizeToContent="Height"
         Background="#20808080"
         d:Background="DarkGray"
         Visibility="Hidden"
@@ -115,10 +116,13 @@
         </ContextMenu>
     </Window.Resources>
 
+    <!-- 窗口:宽度固定 718,高度 SizeToContent="Height" —— 由内容决定,刚好放下所有
+         控件与文字(不再固定 458)。这样文字变长(翻译/大字号/高 DPI)时窗口自动长高,
+         不会裁字;宽度必须固定,否则 WPF 视宽度无限、TextWrapping 失效会把窗口撑爆。 -->
     <Grid x:Name="MainGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- 托盘图标:Hardcodet.NotifyIcon 的 TaskbarIcon(自带独立宿主窗口,菜单由它
