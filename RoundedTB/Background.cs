@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Threading;
 
 namespace RoundedTB
@@ -17,6 +18,14 @@ namespace RoundedTB
         int settingsRequestCount = 0; // 单实例"设置请求"窗口枚举的低频计数(每 3 次 infrequent 一次)
         int loopLogCount = 0; // [DEBUG] 节流状态日志计数
         bool lastFilled = false; // [DEBUG] 上一次 fill 判定,用于记录状态迁移(Alt+Tab 验证)
+
+        // UIA 结构变化(StructureChanged)驱动的任务栏内容刷新。
+        // 已订阅的任务栏句柄(Explorer 重启/句柄变化时会清空重订阅)。
+        private readonly HashSet<IntPtr> _uiaSubscribed = new HashSet<IntPtr>();
+        // 去抖定时器:图标增减往往连发多次事件,等稳定后一次刷新,避免重放抖动。
+        private DispatcherTimer _uiaDebounceTimer;
+        // 待处理标记:事件回调只置位,实际刷新交给主循环(worker)执行,避免在 UIA 线程上重入。
+        private volatile bool _uiaDirty;
 
         // 移植自 gniang (Phase 1):句柄缺失(Explorer 崩溃/重启)时指数退避重建,
         // 而不是每 100ms 重建 CUIAutomation + AppListXaml 直到它回来。
@@ -114,6 +123,11 @@ namespace RoundedTB
                             {
                                 foreach (Types.Taskbar tb in mw.taskbarDetails)
                                 {
+                                    // 首次遇到该任务栏时订阅 UIA 结构变化事件,图标增减即时通知。
+                                    if (_uiaSubscribed.Add(tb.TaskbarHwnd))
+                                    {
+                                        SubscribeUia(tb);
+                                    }
                                     if (RefreshContentBounds(tb))
                                     {
                                         tb.Ignored = true;
@@ -122,6 +136,23 @@ namespace RoundedTB
                             }
 
                             infrequentCount = 0;
+                        }
+
+                        // UIA 结构变化(图标增减)事件驱动:去抖后置位,这里立即刷新一次,
+                        // 让 region 一步更新到位(不再等 1s 周期轮询,消除"二次调整"的跳动)。
+                        if (_uiaDirty)
+                        {
+                            _uiaDirty = false;
+                            if (mw.activeSettings.IsDynamic)
+                            {
+                                foreach (Types.Taskbar tb in mw.taskbarDetails)
+                                {
+                                    if (RefreshContentBounds(tb))
+                                    {
+                                        tb.Ignored = true;
+                                    }
+                                }
+                            }
                         }
 
                         // Check if the taskbar is centred, and if it is, directly update the settings; using an interim bool to avoid delaying because I'm lazy
@@ -137,6 +168,8 @@ namespace RoundedTB
                         {
                             // Forcefully reset taskbars if the taskbar count or main taskbar handle has changed
                             taskbars = Taskbar.GenerateTaskbarInfo();
+                            // 句柄/数量已变,旧 UIA 订阅全部失效,清空后下一轮 infrequent 会重新订阅。
+                            ClearUiaSubscriptions();
                             Debug.WriteLine("Regenerating taskbar info");
 
                             // Explorer 恢复会改变主句柄,这个分支通常在恢复时触发,清掉残留的退避。
@@ -158,6 +191,8 @@ namespace RoundedTB
                                 }
 
                                 taskbars = Taskbar.GenerateTaskbarInfo();
+                                // 同上:句柄缺失重建后重新订阅 UIA 结构变化事件。
+                                ClearUiaSubscriptions();
                                 Debug.WriteLine("Regenerating taskbar info due to a missing handle");
 
                                 if (TaskbarHandlesAreValid(taskbars))
@@ -430,6 +465,69 @@ namespace RoundedTB
                 mw.interaction.AddLog("Taskbar handles unavailable - retrying slowly.");
                 Debug.WriteLine("Taskbar handles unavailable - retrying slowly");
                 mw.SetTrayStatus("RoundedTB - waiting for the taskbar...");
+            }
+        }
+
+        /// <summary>
+        /// 订阅任务栏的 UIA 结构变化事件:程序图标增减时即时通知,去抖后置位 _uiaDirty,
+        /// 由主循环立刻刷新 content bounds 并一次重放到位(消除新图标被裁一半的"二次调整")。
+        /// 订阅失败不影响主功能(周期轮询 + 重放前同步刷新仍兜底)。
+        /// </summary>
+        private void SubscribeUia(Types.Taskbar tb)
+        {
+            try
+            {
+                AutomationElement el = AutomationElement.FromHandle(tb.TaskbarHwnd);
+                // 用静态 Automation.AddAutomationEventHandler
+                // (net10 下 AutomationElement 的实例方法已不存在)。
+                Automation.AddAutomationEventHandler(
+                    AutomationElement.StructureChangedEvent,
+                    el,
+                    TreeScope.Descendants,
+                    OnTaskbarStructureChanged);
+            }
+            catch (Exception)
+            {
+                // 订阅失败不影响主功能
+            }
+        }
+
+        /// <summary>
+        /// 任务栏句柄变化时清空订阅集合:Explorer 重启后句柄全部变化,旧条目已失效,
+        /// 不清会让重建后的任务栏被误判为"已订阅"而漏掉订阅。
+        /// </summary>
+        private void ClearUiaSubscriptions()
+        {
+            _uiaSubscribed.Clear();
+        }
+
+        private void OnTaskbarStructureChanged(object sender, AutomationEventArgs e)
+        {
+            try
+            {
+                // UIA 事件在 UIA 线程触发;去抖(等图标稳定)后置位,由主循环(worker)消费。
+                mw.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    if (_uiaDebounceTimer == null)
+                    {
+                        _uiaDebounceTimer = new DispatcherTimer(DispatcherPriority.Background)
+                        {
+                            Interval = TimeSpan.FromMilliseconds(120)
+                        };
+                        // 只挂一次 Tick:复用同一个定时器,避免每次事件都新建并叠加委托。
+                        _uiaDebounceTimer.Tick += (s, ev) =>
+                        {
+                            _uiaDebounceTimer.Stop();
+                            _uiaDirty = true;
+                        };
+                    }
+                    _uiaDebounceTimer.Stop();
+                    _uiaDebounceTimer.Start();
+                }));
+            }
+            catch (Exception)
+            {
+                // 事件回调异常不应影响主循环
             }
         }
 
