@@ -1,10 +1,24 @@
 name: build
 
-# 每次推送到任意分支都会触发一次 Windows Release 构建,
-# 产物以 "rtb-artifacts" 上传到本次 Actions 运行的页面。
+# CI 默认禁用:不随 push / pull_request 自动运行,只在 Actions 页面手动
+# "Run workflow" 时才构建(避免每次推送都触发一轮 Windows 构建)。
+#
+# 若将来要恢复自动触发,把下面的 workflow_dispatch 块换成:
+#   on:
+#     push:
+#     pull_request:
+# 注意:换成自动触发后 inputs.* 为空,下面已用 `|| '默认值'` 兜底,无需改其他地方。
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Installer version string, e.g. R5.0'
+        required: false
+        default: 'R5.0'
+      channel:
+        description: 'Build channel: master / dev / canary'
+        required: false
+        default: 'master'
 
 jobs:
   build:
@@ -18,15 +32,17 @@ jobs:
     - name: Set up .NET SDK
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        # 项目目标框架已从 net8.0 升到 net10.0(R5),SDK 必须同步,否则还原/编译失败。
+        dotnet-version: '10.0.x'
 
     - name: Build Release
-      run: dotnet build RoundedTB/RoundedTB.csproj -c Release
+      # 必须显式指定 Channel,否则 csproj 默认编成 Canary(带调试日志开关)。
+      run: dotnet build RoundedTB/RoundedTB.csproj -c Release -p:Channel=${{ inputs.channel || 'master' }}
 
     - name: Add commit hash to output folder
       shell: pwsh
       run: |
-        Rename-Item -Path ".\RoundedTB\RoundedTB\bin\Release\net8.0-windows10.0.19041" -NewName "RoundedTB-$(git rev-parse --short ${{ github.sha }})"
+        Rename-Item -Path ".\RoundedTB\RoundedTB\bin\Release\net10.0-windows10.0.19041" -NewName "RoundedTB-$(git rev-parse --short ${{ github.sha }})"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -46,7 +62,7 @@ jobs:
     - name: Set up .NET SDK
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Install Inno Setup
       shell: pwsh
@@ -63,7 +79,8 @@ jobs:
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
-        $ver = "R4.1.2"
+        $ver = "${{ inputs.version || 'R5.0' }}"
+        $channel = "${{ inputs.channel || 'master' }}"
         $iscc = "C:\tools\innosetup\ISCC.exe"
         $staging = Join-Path $env:RUNNER_TEMP "staging"
         $out = Join-Path $env:RUNNER_TEMP "installers"
@@ -76,7 +93,7 @@ jobs:
             $fdFlag = if ($sc) { "false" } else { "true" }
             Write-Host "::group::publish win-$a ($tag)"
             dotnet publish "RoundedTB\RoundedTB.csproj" -c Release -r "win-$a" `
-              --self-contained $sc -p:Channel=master -o $pubDir -v minimal
+              --self-contained $sc -p:Channel=$channel -o $pubDir -v minimal
             if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for win-$a-$tag" }
             Write-Host "::endgroup::"
             Write-Host "::group::ISCC win-$a ($tag)"

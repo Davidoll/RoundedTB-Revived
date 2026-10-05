@@ -103,7 +103,7 @@ exit /b 1
 
 :done
 echo [build.bat] Build OK (channel=%CHANNEL%).
-echo              Output: RoundedTB\bin\Release\net8.0-windows10.0.19041\RoundedTB.exe
+echo              Output: RoundedTB\bin\Release\net10.0-windows10.0.19041\RoundedTB.exe
 echo.
 pause
 endlocal
